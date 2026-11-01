@@ -727,13 +727,8 @@ button, select, input { font: inherit; color: inherit; }
 }
 .app--live .instrument { grid-template-rows: minmax(0, 1fr) auto; }
 .app--live .keyboard { height: clamp(110px, 20vh, 240px); }
-.app--live .hero { padding-top: clamp(16px, 6vh, 72px); }
-.app--live .hero__name--xl { font-size: clamp(110px, min(22vw, 30vh), 380px); }
-.app--live .hero__name--lg { font-size: clamp(80px, min(15vw, 22vh), 280px); }
-.app--live .hero__name--md { font-size: clamp(56px, min(10vw, 14vh), 180px); }
-.app--live .hero__detail { font-size: clamp(18px, 2vw, 30px); }
-.app--live .hero__notes { font-size: clamp(16px, 1.6vw, 26px); }
-.app--live .hero__alts { display: none; }
+/* No chord name to keep legible, so bars stay solid all the way out of the top. */
+.app--live .waterfall__canvas { mask-image: none; }
 
 .live-controls {
   position: fixed;

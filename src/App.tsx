@@ -250,14 +250,19 @@ export default function App() {
       <section className="instrument">
         {resetCount > 0 && <div key={resetCount} className="toast" role="status">Reset</div>}
         <Waterfall low={KEYBOARD_LOW} high={KEYBOARD_HIGH} held={midi.held}>
-          <ChordDisplay
-            detection={detection}
-            notes={shown}
-            stale={midi.held.length === 0}
-            naming={naming}
-            spell={chordSpell}
-            idle={noDevice ? <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} /> : undefined}
-          />
+          {live ? (
+            // Live mode has no text over the bars, except to say why nothing will show up.
+            noDevice && <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} />
+          ) : (
+            <ChordDisplay
+              detection={detection}
+              notes={shown}
+              stale={midi.held.length === 0}
+              naming={naming}
+              spell={chordSpell}
+              idle={noDevice ? <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} /> : undefined}
+            />
+          )}
         </Waterfall>
         <Keyboard
           low={KEYBOARD_LOW}
