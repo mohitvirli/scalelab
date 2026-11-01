@@ -17,6 +17,14 @@ interface HeaderProps {
   theme: Theme
   onThemeChange: (t: Theme) => void
   onPanic: () => void
+  onReset: () => void
+  /** Reset's MIDI mapping: a description of the bound control, or null. */
+  resetBinding: string | null
+  learning: boolean
+  onLearn: () => void
+  onCancelLearn: () => void
+  onClearBinding: () => void
+  onLive: () => void
 }
 
 function Segmented<T extends string>({ label, value, options, onChange, disabled, title }: {
@@ -97,6 +105,12 @@ export function Header(p: HeaderProps) {
           All notes off
         </button>
 
+        <ResetControl {...p} />
+
+        <button type="button" className="btn" onClick={p.onLive} title="Live mode: just the chord, keys and progression, for a second screen (L)">
+          Live
+        </button>
+
         <button
           type="button"
           className="btn btn--ghost btn--icon"
@@ -108,5 +122,46 @@ export function Header(p: HeaderProps) {
         </button>
       </div>
     </header>
+  )
+}
+
+/** Reset button plus its MIDI-learn button; the learn prompt drops down below while waiting. */
+function ResetControl(p: HeaderProps) {
+  return (
+    <div className="reset">
+      <div className="reset__group">
+        <button
+          type="button"
+          className="btn"
+          onClick={p.onReset}
+          title={`Start fresh: clears the chord, history, selected keys and lock (R)${p.resetBinding ? `. MIDI: ${p.resetBinding}` : ''}`}
+        >
+          Reset
+        </button>
+        <button
+          type="button"
+          className={`btn btn--map ${p.resetBinding ? 'is-mapped' : ''}`}
+          onClick={p.learning ? p.onCancelLearn : p.onLearn}
+          aria-pressed={p.learning}
+          title={p.resetBinding ? `Reset is on ${p.resetBinding}. Click to map another control.` : 'Map Reset to a pad or button on your controller'}
+        >
+          {p.resetBinding ? 'MIDI ✓' : 'Map'}
+        </button>
+      </div>
+      {p.learning && (
+        <div className="reset__learn" role="status">
+          <strong>Press a pad or button</strong>
+          <span>on your controller to use it as Reset. Spare pads are ideal: Scalelab already ignores their notes.</span>
+          <div className="reset__learn-actions">
+            {p.resetBinding && (
+              <button type="button" className="btn btn--small btn--ghost" onClick={p.onClearBinding}>
+                Remove {p.resetBinding}
+              </button>
+            )}
+            <button type="button" className="btn btn--small" onClick={p.onCancelLearn}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }

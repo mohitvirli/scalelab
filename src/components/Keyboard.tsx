@@ -13,7 +13,7 @@ export interface KeyboardProps {
   selectedPcs: ReadonlySet<number>
   /** Chord root pitch class (marked on held keys). */
   rootPc: number | null
-  /** Extra keys to highlight, e.g. a suggested chord voicing (Phase 2). */
+  /** Extra keys to highlight, e.g. a hovered chord suggestion. */
   preview?: readonly number[]
   naming: OctaveNaming
   spell: Speller

@@ -32,8 +32,13 @@ npm run preview   # serve the build
 - **Selected keys**: The set of notes used to find scales. With *Collect from playing* on, every note you play is added. You can also click keys on the on-screen keyboard or the 12 note buttons to toggle notes. **Reset** clears the set.
 - **Scale matches**: Lists every scale that contains all the selected notes, ranked. A scale ranks higher when its tonic is a note you played often or kept in the bass, and when you played its tonic triad. "Same notes as …" lists relatives that share the exact notes, such as C major and A natural minor. The **Ambiguous** badge appears when the top matches are too close to call.
 - **Lock**: Freezes a scale. Notes you play outside it are shown in red and listed under the scale.
+- **Reset**: Starts fresh, e.g. between songs. It clears held notes, the chord, the chord history, the selected keys and any scale lock. Shortcut: **R**. A **Reset** pill flashes on the stage to confirm.
+- **Map** (next to Reset): Lets you trigger Reset from your controller without changing any of its settings. Click **Map**, then press any pad, button or key, and that control becomes Reset (the button then reads **MIDI ✓**; hover it to see which control). Spare pads are the best choice: they send notes on channel 10, which Scalelab already ignores for chords, so nothing else changes. Notes, CC buttons (fires when the value goes past 64, so once per press) and program changes all work. The sustain pedal can't be mapped. A key you map stops counting as a note. Only the selected input is listened to, so on Windows Scalelab never opens a port Ableton might want. Click **Map** again to remap, or remove the mapping from its prompt. Esc cancels.
 - **All notes off**: Forgets every held note. Use it if a note stays lit after you've let go, which happens when its note-off message never arrives (for example, a cable pulled mid-chord). It also clears the chord name.
-- **Waterfall**: Each held note grows a bar from its key; on release the bar floats up and fades.
+- **Waterfall**: Each held note grows a bar from its key; on release the bar floats up and out of the top.
+- **Played / Next**: The strip under the keyboard lists the chords you've played (newest on the right, with Roman numerals for the likely or locked scale) and the likely next chords. Suggestions combine common moves (V→I, ii→V, IV→V, vi→IV…, and minor-key equivalents; a secondary dominant like D in C major points to G) with what you've actually played. If you've gone Am → F before, F ranks first after Am, marked ↻. Hover a suggestion to see it outlined on the keyboard. With no scale yet, the chord is assumed to be home (C → C major, Am → A minor).
+- **Live** (shortcut **L**): A stripped-down view for a second screen: big chord name, waterfall, keyboard, and a bar with the scale, played chords and next chords. The controls in the corner fade away with the cursor after a few seconds. **F** toggles fullscreen, and **L** or **Esc** goes back. Live mode keeps the screen awake, and it lives in the URL (`http://localhost:5173/#live`), so you can keep one window in live mode on the background screen and a normal one on your main screen.
+- The panels below the keyboard keep a fixed height (the scale panel always reserves four cards with every line), so nothing on the page shifts as matches come and go.
 - Pads on MIDI channel 10 are ignored, since that's the KeyLab pads' default channel. If you set your keys to channel 10, change `ignoreChannels` in `src/midi/useMidiInput.ts`.
 
 ## Running alongside Ableton
@@ -61,23 +66,25 @@ src/
     notes.ts         MIDI → names, Ableton/scientific octaves, sharp/flat/scale spelling
     chords.ts        detectChord(): notes → chord/interval/note, inversions, ranking
     scales.ts        rankScales(), isAmbiguous(), getScale()
-    diatonic.ts      diatonicChords(): Roman numerals + triads/7ths per scale (for Phase 2)
+    diatonic.ts      diatonicChords(): Roman numerals + triads/7ths per scale
+    progressions.ts  suggestNext(): likely next chords from degree moves + your own history; romanFor()
   midi/
-    useMidiInput.ts  Web MIDI access, device list, hot-plug, held notes + sustain
+    useMidiInput.ts  Web MIDI access, device list, hot-plug, held notes + sustain, intercept hook
+    binding.ts       MIDI learn: learnFrom(), bindingMatcher(), describeBinding()
+    useMidiTrigger.ts  a MIDI-learnable action (Reset), persisted in localStorage
   hooks/
     useScaleSelection.ts  selected-keys set, note weights, bass-note tonic hint
+    useChordHistory.ts    chords played, merging rolled attacks into one entry
+    useLiveMode.ts        #live URL state, fullscreen, screen wake lock, idle cursor
     usePersistentState.ts
-  components/        Header, ChordDisplay, ScalePanel, Keyboard, Waterfall, MidiEmptyState
+  components/        Header, ChordDisplay, ScalePanel, ProgressionPanel, LiveControls, Keyboard, Waterfall, MidiEmptyState
     keyLayout.ts     key geometry shared by Keyboard and Waterfall so bars line up with keys
   App.tsx            wires it together
 ```
 
 Chord and scale theory comes from [tonal](https://github.com/tonaljs/tonal), using `Chord.detect`, `Scale`, `ScaleType`, `Mode`, `Key` and `Interval`. Scalelab adds its own ranking on top. Chord candidates are scored by how common the chord type is, with a penalty for inversions. Scales are scored by a prior on the scale type, how many of the scale's notes were played, how strongly the root stands out, and whether the tonic triad was played.
 
-## Phase 2: suggested chords and how to play them (not built yet)
+## Next ideas (not built yet)
 
-The code already has places for these:
-
-- **Probable chords**: `diatonicChords(scale)` already returns e.g. `vi = Am` with the seventh chord too, and it's tested. Next, add `src/theory/progressions.ts` with `suggestNext(scale, currentChord)` that matches the current chord's root against the diatonic degrees and ranks common moves (V→I, ii→V, IV→I, vi→IV…). Render it in a `SuggestionsPanel` below the scale panel (marked in `App.tsx`), driven by `activeScale` (locked or top match) and `detection`.
-- **How to play**: `Keyboard` already accepts a `preview` prop (an array of MIDI notes drawn with a teal outline). Use `chordPitchClasses(symbol)` to get the voicing for root position and each inversion, and pass the clicked one in. Fingering (1-3-5, 1-2-4, 1-2-5) can be a small pure function in `src/theory/fingering.ts`.
+- **How to play**: Hovering a suggestion already outlines its root-position voicing via the `Keyboard` `preview` prop. Next: offer each inversion (`chordPitchClasses(symbol)` rotated). Fingering (1-3-5, 1-2-4, 1-2-5) can be a small pure function in `src/theory/fingering.ts`.
 - **Hear it**: Add a small Web Audio synth in `src/audio/` that takes the same MIDI-note arrays.

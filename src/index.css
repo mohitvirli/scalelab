@@ -74,7 +74,10 @@ button, select, input { font: inherit; color: inherit; }
 .app {
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  /* Header, instrument, legend, progression, scale panel. Only the instrument flexes; the panels
+     below it keep a fixed height so nothing jumps while you play. */
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  row-gap: 0;
   max-width: 1600px;
   margin: 0 auto;
   padding: 0 clamp(16px, 2.5vw, 36px) 18px;
@@ -200,6 +203,7 @@ button, select, input { font: inherit; color: inherit; }
 /* ---------- Instrument: waterfall + keys ---------- */
 
 .instrument {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(220px, 1fr) auto;
   min-height: 0;
@@ -220,7 +224,8 @@ button, select, input { font: inherit; color: inherit; }
   width: 100%;
   height: 100%;
   /* Bars fade as they rise, so the chord name above them stays readable. */
-  mask-image: linear-gradient(to top, #000 30%, rgb(0 0 0 / 0.25) 75%, transparent 100%);
+  /* Softer than before, so a released bar is still visibly travelling when it leaves the top. */
+  mask-image: linear-gradient(to top, #000 40%, rgb(0 0 0 / 0.4) 85%, rgb(0 0 0 / 0.15) 100%);
 }
 .waterfall__overlay {
   position: absolute;
@@ -429,12 +434,18 @@ button, select, input { font: inherit; color: inherit; }
 .match.is-locked { border-color: var(--scale); background: color-mix(in srgb, var(--scale) 10%, transparent); }
 .match__name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .match--top .match__name { font-family: var(--display); font-weight: 500; font-size: clamp(22px, 2vw, 28px); line-height: 1.05; }
-.match__notes { font-size: 12px; letter-spacing: 0.05em; color: var(--muted); margin-top: 2px; }
+.match__notes { font-size: 12px; letter-spacing: 0.05em; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .match__same, .match__warn { font-size: 12px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .match__same { color: var(--scale); }
 .match__warn { color: var(--warn); }
 .match__fit { height: 3px; margin-top: 7px; background: var(--line); border-radius: 2px; overflow: hidden; max-width: 160px; }
 .match__fit span { display: block; height: 100%; background: var(--scale); border-radius: 2px; }
+.match__fit--hidden { visibility: hidden; }
+/* Every card is the same height whatever it holds: equal rows, every line always rendered. */
+.matches { grid-auto-rows: 1fr; }
+.match--empty { border-style: dashed; background: transparent !important; }
+.match__hint { font-family: var(--font); font-size: 14px; font-weight: 500; color: var(--faint); }
+.btn--lock { min-width: 64px; flex-shrink: 0; }
 .btn--small { height: 28px; padding: 0 10px; font-size: 13px; border-radius: 8px; }
 
 
@@ -551,6 +562,7 @@ button, select, input { font: inherit; color: inherit; }
 .lg--held { background: var(--lamp); }
 .lg--scale { background: var(--scale-white); border: 1px solid var(--scale); }
 .lg--dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lamp-2); }
+.lg--preview { box-shadow: inset 0 0 0 2px var(--scale); }
 .lg--root {
   width: 16px; height: 16px; border-radius: 50%; background: var(--lamp-ink); color: var(--lamp);
   font-size: 9px; font-weight: 800; text-align: center; line-height: 16px;
@@ -570,3 +582,190 @@ button, select, input { font: inherit; color: inherit; }
   .matches { grid-template-columns: 1fr; }
   .key__label { font-size: 8px; }
 }
+
+/* ---------- Reset + MIDI mapping ---------- */
+
+.reset { position: relative; }
+.reset__group { display: inline-flex; }
+.reset__group .btn:first-child { border-radius: 10px 0 0 10px; }
+.reset__group .btn:last-child { border-radius: 0 10px 10px 0; border-left: 0; }
+.btn--map { color: var(--muted); font-size: 13px; padding: 0 10px; background: transparent; }
+.btn--map.is-mapped { color: var(--lamp-text); }
+.btn--map[aria-pressed='true'] { color: var(--lamp-ink); }
+.reset__learn {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: 280px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.reset__learn strong { color: var(--text); font-size: 14px; animation: pulse 1.2s ease-in-out infinite; }
+.reset__learn-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+@keyframes pulse { 50% { opacity: 0.5; } }
+
+.toast {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 5;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--lamp);
+  color: var(--lamp-ink);
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+  animation: toast 1.4s ease forwards;
+}
+@keyframes toast {
+  0% { opacity: 0; transform: translateY(-4px); }
+  12%, 70% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+/* ---------- Progression: played + next ---------- */
+
+.prog {
+  display: grid;
+  /* Fixed width for "Next", so longer chord names never resize anything around them. */
+  grid-template-columns: minmax(0, 1fr) min(46%, 440px);
+  height: 86px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.prog__section {
+  min-width: 0;
+  padding: 10px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prog__section + .prog__section { border-left: 1px solid var(--line); }
+.prog h2 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.prog__in { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--faint); }
+.prog__empty { margin: 0; font-size: 14px; color: var(--faint); line-height: 44px; white-space: nowrap; }
+
+/* Newest on the right; older chords slide off the left edge and fade. */
+.prog__track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 22px;
+  overflow: hidden;
+  mask-image: linear-gradient(to right, transparent, #000 18%);
+}
+.prog__track li { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; color: var(--muted); }
+.prog__track li.is-current { color: var(--text); }
+.prog__track li.is-current .prog__roman { color: var(--lamp-text); }
+
+.prog__sym {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 26px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.prog__sym .acc { font-size: 0.7em; vertical-align: 0.35em; }
+.prog__roman { font-size: 12px; font-weight: 600; color: var(--faint); letter-spacing: 0.03em; line-height: 1.2; white-space: nowrap; }
+.prog__learned { margin-left: 4px; color: var(--scale); }
+
+.prog__chips { list-style: none; margin: 0; padding: 0; display: flex; gap: 8px; }
+.prog__chips li { flex: 1 1 0; min-width: 0; }
+.prog__chip {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: transparent;
+  cursor: default;
+  overflow: hidden;
+}
+.prog__chip .prog__sym { font-size: 20px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding: 0 6px; }
+.prog__chip:hover, .prog__chip:focus-visible { border-color: var(--scale); }
+.prog__chip.is-top { background: color-mix(in srgb, var(--scale) 12%, transparent); border-color: color-mix(in srgb, var(--scale) 45%, var(--line)); }
+
+@media (max-width: 860px) {
+  .prog { grid-template-columns: 1fr; height: auto; }
+  .prog__section + .prog__section { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* ---------- Live mode: just the essentials, for a second screen ---------- */
+
+.app.app--live {
+  height: 100dvh;
+  max-width: none;
+  padding: 14px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  row-gap: 12px;
+}
+.app--live .instrument { grid-template-rows: minmax(0, 1fr) auto; }
+.app--live .keyboard { height: clamp(110px, 20vh, 240px); }
+.app--live .hero { padding-top: clamp(16px, 6vh, 72px); }
+.app--live .hero__name--xl { font-size: clamp(110px, min(22vw, 30vh), 380px); }
+.app--live .hero__name--lg { font-size: clamp(80px, min(15vw, 22vh), 280px); }
+.app--live .hero__name--md { font-size: clamp(56px, min(10vw, 14vh), 180px); }
+.app--live .hero__detail { font-size: clamp(18px, 2vw, 30px); }
+.app--live .hero__notes { font-size: clamp(16px, 1.6vw, 26px); }
+.app--live .hero__alts { display: none; }
+
+.app--live .prog { grid-template-columns: minmax(0, 0.7fr) minmax(0, 2fr) min(42%, 640px); height: 120px; margin: 0; }
+.app--live .prog__section { padding: 14px 22px; justify-content: center; }
+.app--live .prog__sym { font-size: 40px; }
+.app--live .prog__roman { font-size: 15px; }
+.app--live .prog__chip { height: 66px; }
+.app--live .prog__chip .prog__sym { font-size: 30px; }
+.app--live .prog__track { gap: 32px; }
+.prog__scale-name {
+  font-family: var(--display);
+  font-size: clamp(22px, 2.2vw, 34px);
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--scale);
+}
+.prog__scale-name .acc { font-size: 0.7em; vertical-align: 0.35em; }
+
+.live-controls {
+  position: fixed;
+  top: 22px;
+  right: 26px;
+  z-index: 20;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface) 85%, transparent);
+  border: 1px solid var(--line);
+  transition: opacity 400ms ease;
+}
+.app.is-idle { cursor: none; }
+.app.is-idle .live-controls { opacity: 0; pointer-events: none; }

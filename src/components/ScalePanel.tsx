@@ -15,14 +15,15 @@ interface ScalePanelProps {
 }
 
 const PCS = Array.from({ length: 12 }, (_, i) => i)
+const SLOTS = 4
 
 export function ScalePanel({
   selected, onTogglePc, listening, onListeningChange, onReset, matches, ambiguous, locked, onLock, spell,
 }: ScalePanelProps) {
   const outOfKey = locked ? [...selected].filter((pc) => !locked.pcs.includes(pc)).sort((a, b) => a - b) : []
   const topScore = matches[0]?.score ?? 1
-  // Locked scale first, then the best other matches; four cards in a 2×2 grid.
-  const cards = locked ? [locked, ...matches.filter((m) => m.key !== locked.key)].slice(0, 4) : matches.slice(0, 4)
+  // Locked scale first, then the best other matches, in a 2×2 grid.
+  const cards = locked ? [locked, ...matches.filter((m) => m.key !== locked.key)].slice(0, SLOTS) : matches.slice(0, SLOTS)
 
   return (
     <section className="panel scale">
@@ -66,47 +67,57 @@ export function ScalePanel({
           {ambiguous && !locked && <span className="badge" title="The top matches fit almost equally well">Ambiguous</span>}
         </header>
 
-        {cards.length === 0 ? (
-          <p className="hint">
-            {selected.size === 0 ? 'No notes selected yet.' : 'No listed scale contains all selected notes.'}
-          </p>
-        ) : (
-          <ol className="matches">
-            {cards.map((m, i) => {
-              const isLocked = locked?.key === m.key
+        {/* Always four slots, each with every line reserved, so the panel never changes height. */}
+        <ol className="matches">
+          {Array.from({ length: SLOTS }, (_, i) => {
+            const m = cards[i]
+            if (!m) {
               return (
-                <li key={m.key} className={`match ${i === 0 ? 'match--top' : ''} ${isLocked ? 'is-locked' : ''}`}>
+                <li key={`empty-${i}`} className={`match match--empty ${i === 0 ? 'match--top' : ''}`}>
                   <div className="match__body">
-                    <div className="match__name"><Accidentals text={m.name} /></div>
-                    <div className="match__notes">{m.notes.map(pretty).join(' ')}</div>
-                    {isLocked && outOfKey.length > 0 ? (
-                      <div className="match__warn">Outside: {outOfKey.map((pc) => pretty(spell(pc))).join(' ')}</div>
-                    ) : (
-                      m.sameNotesAs.length > 0 && (
-                        <div className="match__same" title={`Same notes as ${m.sameNotesAs.join(', ')}`}>
-                          = {m.sameNotesAs.slice(0, 2).map(pretty).join(', ')}
-                        </div>
-                      )
-                    )}
-                    {!locked && (
-                      <div className="match__fit" aria-hidden>
-                        <span style={{ width: `${Math.max(8, (m.score / topScore) * 100)}%` }} />
-                      </div>
-                    )}
+                    <div className="match__name">
+                      {i === 0 && cards.length === 0 ? (
+                        <span className="match__hint">
+                          {selected.size === 0 ? 'No notes selected yet' : 'No listed scale has all these notes'}
+                        </span>
+                      ) : '\u00a0'}
+                    </div>
+                    <div className="match__notes">{'\u00a0'}</div>
+                    <div className="match__same">{'\u00a0'}</div>
+                    <div className="match__fit match__fit--hidden" aria-hidden />
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => onLock(isLocked ? null : m)}
-                    aria-pressed={isLocked}
-                  >
-                    {isLocked ? 'Unlock' : 'Lock'}
-                  </button>
                 </li>
               )
-            })}
-          </ol>
-        )}
+            }
+            const isLocked = locked?.key === m.key
+            return (
+              <li key={m.key} className={`match ${i === 0 ? 'match--top' : ''} ${isLocked ? 'is-locked' : ''}`}>
+                <div className="match__body">
+                  <div className="match__name"><Accidentals text={m.name} /></div>
+                  <div className="match__notes">{m.notes.map(pretty).join(' ')}</div>
+                  {isLocked && outOfKey.length > 0 ? (
+                    <div className="match__warn">Outside: {outOfKey.map((pc) => pretty(spell(pc))).join(' ')}</div>
+                  ) : (
+                    <div className="match__same" title={m.sameNotesAs.length > 0 ? `Same notes as ${m.sameNotesAs.join(', ')}` : undefined}>
+                      {m.sameNotesAs.length > 0 ? `= ${m.sameNotesAs.slice(0, 2).map(pretty).join(', ')}` : '\u00a0'}
+                    </div>
+                  )}
+                  <div className={`match__fit ${locked ? 'match__fit--hidden' : ''}`} aria-hidden>
+                    <span style={{ width: `${Math.max(8, (m.score / topScore) * 100)}%` }} />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small btn--lock"
+                  onClick={() => onLock(isLocked ? null : m)}
+                  aria-pressed={isLocked}
+                >
+                  {isLocked ? 'Unlock' : 'Lock'}
+                </button>
+              </li>
+            )
+          })}
+        </ol>
       </div>
     </section>
   )

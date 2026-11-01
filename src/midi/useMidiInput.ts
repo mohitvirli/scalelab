@@ -22,6 +22,11 @@ export interface UseMidiInputOptions {
   ignoreChannels?: readonly number[]
   /** Substring used to auto-select an input. */
   preferName?: string
+  /**
+   * Sees every message from the selected input first, before channel filtering. Return true to
+   * consume it (e.g. a pad mapped to Reset), so it doesn't count as a note. Kept in a ref.
+   */
+  intercept?: (data: Uint8Array) => boolean
 }
 
 const SUPPORTED = typeof navigator !== 'undefined' && 'requestMIDIAccess' in navigator
@@ -74,7 +79,9 @@ function pickDefault(inputs: MidiInputInfo[], preferName: string): MidiInputInfo
  * Web MIDI input: lists devices, follows hot-plugging, and tracks held notes
  * (keys down plus notes kept alive by the sustain pedal).
  */
-export function useMidiInput({ onNoteOn, ignoreChannels = [9], preferName = 'KeyLab' }: UseMidiInputOptions = {}) {
+export function useMidiInput({
+  onNoteOn, ignoreChannels = [9], preferName = 'KeyLab', intercept,
+}: UseMidiInputOptions = {}) {
   const [status, setStatus] = useState<MidiStatus>(SUPPORTED ? 'requesting' : 'unsupported')
   const [error, setError] = useState<string | null>(null)
   const [access, setAccess] = useState<MIDIAccess | null>(null)
@@ -89,9 +96,11 @@ export function useMidiInput({ onNoteOn, ignoreChannels = [9], preferName = 'Key
   const pedal = useRef(false)
   const onNoteOnRef = useRef(onNoteOn)
   const ignoreRef = useRef(ignoreChannels)
+  const interceptRef = useRef(intercept)
   useEffect(() => {
     onNoteOnRef.current = onNoteOn
     ignoreRef.current = ignoreChannels
+    interceptRef.current = intercept
   })
 
   const flush = useCallback(() => {
@@ -155,6 +164,7 @@ export function useMidiInput({ onNoteOn, ignoreChannels = [9], preferName = 'Key
     const onMessage = (e: MIDIMessageEvent) => {
       const data = e.data
       if (!data || data.length < 2) return
+      if (interceptRef.current?.(data)) return
       const type = data[0] & 0xf0
       const channel = data[0] & 0x0f
       if (ignoreRef.current.includes(channel)) return

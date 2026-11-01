@@ -147,7 +147,7 @@ export function detectChord(midiNotes: Iterable<number>, spell: Speller = sharpS
   return { kind: 'cluster', notes: names, guess: best?.candidate ?? null, extra: best ? [best.extra] : [] }
 }
 
-/** The pitch classes of any chord symbol, e.g. for highlighting a suggested chord (Phase 2). */
+/** The pitch classes of any chord symbol, e.g. for previewing a suggested chord. */
 export function chordPitchClasses(symbol: string): number[] {
   return Chord.get(symbol).notes.map((n) => Note.chroma(n)!)
 }

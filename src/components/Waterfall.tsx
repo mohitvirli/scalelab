@@ -80,7 +80,8 @@ export function Waterfall({ low, high, held, children }: WaterfallProps) {
         if (pitchClass(k.midi) === 0) ctx.fillRect(Math.round(k.left * w), 0, 1, h)
       }
 
-      bars.current = bars.current.filter((b) => b.end === null || h - ((now - b.end) / 1000) * SPEED > -RADIUS)
+      // A released bar is done once its bottom has left the top of the canvas.
+      bars.current = bars.current.filter((b) => b.end === null || h - ((now - b.end) / 1000) * SPEED > 0)
 
       for (const b of bars.current) {
         const k = layout.get(b.midi)
@@ -91,11 +92,17 @@ export function Waterfall({ low, high, held, children }: WaterfallProps) {
         const bw = Math.max(2, k.width * w - 3)
         const active = b.end === null
 
+        // Clip the part above the canvas, but measure the height from the clipped top. (Measuring it
+        // from the real top kept the drawn bar parked at the top edge once it got there, until it
+        // vanished, instead of sliding up and out.)
+        const y = Math.max(top, -RADIUS)
+        if (bottom <= y) continue
+
         // Matte: flat fill, no glow. Released notes fade back slightly.
         ctx.globalAlpha = active ? 1 : 0.7
         ctx.fillStyle = k.black ? colorDark : color
         ctx.beginPath()
-        ctx.roundRect(x, Math.max(top, -RADIUS), bw, Math.max(bottom - top, 2), RADIUS)
+        ctx.roundRect(x, y, bw, Math.max(bottom - y, 2), RADIUS)
         ctx.fill()
       }
       ctx.globalAlpha = 1
