@@ -23,6 +23,22 @@ npm run preview   # serve the build
 
 `.npmrc` sets `legacy-peer-deps=true` because npm 11 crashes while resolving Vitest 5's optional peer dependencies.
 
+## Deploying (Vercel)
+
+Every branch gets its own preview deployment through Vercel's GitHub integration. `vercel.json` pins the build (Vite, `npm ci`, `npm run build`, output in `dist/`), and `.npmrc` applies there too.
+
+One-time setup:
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import `mohitvirli/scalelab`. If it isn't listed, choose **Adjust GitHub App Permissions** and give Vercel access to the repo.
+2. Keep the detected settings and click **Deploy**.
+
+After that, every push builds automatically:
+
+- **Production**: the default branch, at the project's main `*.vercel.app` URL.
+- **Previews**: every other branch gets a URL that always points at its latest push, like `scalelab-git-<branch>-<team>.vercel.app` (slashes in the branch name become dashes). Each pull request also gets a comment with its preview link.
+
+Previews are behind Vercel login by default (Settings → Deployment Protection). Turn that off if you want to open them on another device without signing in. Web MIDI works on the deployed site because Vercel serves HTTPS; Chrome asks for MIDI permission once per site.
+
 ## Using it
 
 - **Input**: Scalelab picks the KeyLab automatically, preferring its `MIDI` port over the `DAW` port. You can switch inputs from the dropdown, and it remembers your choice. Devices can be plugged in or pulled out while the app is open.
