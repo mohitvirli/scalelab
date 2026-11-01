@@ -1,4 +1,5 @@
 import type { MidiInputInfo } from '../midi/useMidiInput'
+import { MidiMap } from './MidiMap'
 import type { OctaveNaming } from '../theory'
 
 export type Theme = 'dark' | 'light'
@@ -125,43 +126,24 @@ export function Header(p: HeaderProps) {
   )
 }
 
-/** Reset button plus its MIDI-learn button; the learn prompt drops down below while waiting. */
 function ResetControl(p: HeaderProps) {
   return (
-    <div className="reset">
-      <div className="reset__group">
-        <button
-          type="button"
-          className="btn"
-          onClick={p.onReset}
-          title={`Start fresh: clears the chord, history, selected keys and lock (R)${p.resetBinding ? `. MIDI: ${p.resetBinding}` : ''}`}
-        >
-          Reset
-        </button>
-        <button
-          type="button"
-          className={`btn btn--map ${p.resetBinding ? 'is-mapped' : ''}`}
-          onClick={p.learning ? p.onCancelLearn : p.onLearn}
-          aria-pressed={p.learning}
-          title={p.resetBinding ? `Reset is on ${p.resetBinding}. Click to map another control.` : 'Map Reset to a pad or button on your controller'}
-        >
-          {p.resetBinding ? 'MIDI ✓' : 'Map'}
-        </button>
-      </div>
-      {p.learning && (
-        <div className="reset__learn" role="status">
-          <strong>Press a pad or button</strong>
-          <span>on your controller to use it as Reset. Spare pads are ideal: Scalelab already ignores their notes.</span>
-          <div className="reset__learn-actions">
-            {p.resetBinding && (
-              <button type="button" className="btn btn--small btn--ghost" onClick={p.onClearBinding}>
-                Remove {p.resetBinding}
-              </button>
-            )}
-            <button type="button" className="btn btn--small" onClick={p.onCancelLearn}>Cancel</button>
-          </div>
-        </div>
-      )}
-    </div>
+    <MidiMap
+      action="Reset"
+      binding={p.resetBinding}
+      learning={p.learning}
+      onLearn={p.onLearn}
+      onCancel={p.onCancelLearn}
+      onClear={p.onClearBinding}
+    >
+      <button
+        type="button"
+        className="btn"
+        onClick={p.onReset}
+        title={`Start fresh: clears the chord, history, selected keys and lock (R)${p.resetBinding ? `. MIDI: ${p.resetBinding}` : ''}`}
+      >
+        Reset
+      </button>
+    </MidiMap>
   )
 }

@@ -37,7 +37,11 @@ npm run preview   # serve the build
 - **All notes off**: Forgets every held note. Use it if a note stays lit after you've let go, which happens when its note-off message never arrives (for example, a cable pulled mid-chord). It also clears the chord name.
 - **Waterfall**: Each held note grows a bar from its key; on release the bar floats up and out of the top.
 - **Played / Next**: The strip under the keyboard lists the chords you've played (newest on the right, with Roman numerals for the likely or locked scale) and the likely next chords. Suggestions combine common moves (V→I, ii→V, IV→V, vi→IV…, and minor-key equivalents; a secondary dominant like D in C major points to G) with what you've actually played. If you've gone Am → F before, F ranks first after Am, marked ↻. Hover a suggestion to see it outlined on the keyboard. With no scale yet, the chord is assumed to be home (C → C major, Am → A minor).
-- **Live** (shortcut **L**): A stripped-down view for a second screen: just the waterfall and the keyboard, with the held notes named on the keys. No chord name, scale tint, selected-key dots or panels. The controls in the corner fade away with the cursor after a few seconds. **F** toggles fullscreen, and **L** or **Esc** goes back. Live mode keeps the screen awake, and it lives in the URL (`http://localhost:5173/#live`), so you can keep one window in live mode on the background screen and a normal one on your main screen.
+- **Live** (shortcut **L**): A stripped-down view for a second screen: just the waterfall and the keyboard, with the held notes named on the keys. No chord name, scale tint, selected-key dots or panels. The controls in the corner fade away with the cursor after a few seconds. **F** toggles fullscreen, and **L** or **Esc** goes back. Live mode keeps the screen awake, and it lives in the URL (`http://localhost:5173/#live`, `#live/weather`, `#live/cymatics`), so you can keep one window in live mode on the background screen and a normal one on your main screen.
+- **Visualizations** (live mode): press **1**, **2** or **3**, or **V** to cycle, or use the buttons in the corner. Next to **Next** is its own **Map** button, so a second pad can cycle them too. Weather and Cymatics use WebGPU (Chrome or Edge with hardware acceleration).
+  1. **Waterfall**: bars rise out of the keys.
+  2. **Weather**: a watercolour sky that plays along. Each note rains from the sky above its key, harder hits making bigger, faster drops; held notes keep raining, and the sustain pedal brings mist. The chord gathers into clouds, low and heavy for bass notes and high and thin for treble ones, lit warm for major, cool for minor, stormy for diminished. Tense harmony (dominant 7ths, tritones, clusters) charges and darkens the sky, and resolving it (G7 → C, E → Am) discharges as lightning striking the root, bigger the longer it built. Fast playing builds a downpour, progressions push the wind one way or the other round the circle of fifths, and a key change shifts the light. Stop playing and the sky clears; after about 20 seconds it turns to night, with stars where your last notes were. Without WebGPU, rain and lightning still work over a plain sky.
+  3. **Cymatics**: sand on a vibrating plate (Chladni figures), full screen. Each note's interval above the root becomes a just-intonation ratio, and the ratio sets a vibration pattern, so consonant chords settle into clean, symmetric figures while dissonant ones stay fine and restless. A new chord scatters the sand and it regroups. The figure turns with the root, so every major chord is the same shape, rotated.
 - The panels below the keyboard keep a fixed height (the scale panel always reserves four cards with every line), so nothing on the page shifts as matches come and go.
 - Pads on MIDI channel 10 are ignored, since that's the KeyLab pads' default channel. If you set your keys to channel 10, change `ignoreChannels` in `src/midi/useMidiInput.ts`.
 
@@ -68,6 +72,7 @@ src/
     scales.ts        rankScales(), isAmbiguous(), getScale()
     diatonic.ts      diatonicChords(): Roman numerals + triads/7ths per scale
     progressions.ts  suggestNext(): likely next chords from degree moves + your own history; romanFor()
+    tension.ts       tension(), chordQuality(), resolves(), fifthsDelta() for the visualizations
   midi/
     useMidiInput.ts  Web MIDI access, device list, hot-plug, held notes + sustain, intercept hook
     binding.ts       MIDI learn: learnFrom(), bindingMatcher(), describeBinding()
@@ -77,7 +82,13 @@ src/
     useChordHistory.ts    chords played, merging rolled attacks into one entry
     useLiveMode.ts        #live URL state, fullscreen, screen wake lock, idle cursor
     usePersistentState.ts
-  components/        Header, ChordDisplay, ScalePanel, ProgressionPanel, LiveControls, Keyboard, Waterfall, MidiEmptyState
+  viz/               live-mode visualizations
+    noteBus.ts       notes, velocities, sustain and harmony, read by the animation loops every frame
+    registry.ts      the list and order of visualizations
+    gpu.ts           shared WebGPU device, canvas sizing
+    weather/         sim.ts (rules, tested), sky.wgsl (watercolour sky), draw.ts (rain, lightning, stars)
+    cymatics/        modes.ts (chord → plate modes, tested), cymatics.wgsl (sand compute + render)
+  components/        Header, ChordDisplay, ScalePanel, ProgressionPanel, LiveControls, MidiMap, Keyboard, Waterfall, MidiEmptyState
     keyLayout.ts     key geometry shared by Keyboard and Waterfall so bars line up with keys
   App.tsx            wires it together
 ```

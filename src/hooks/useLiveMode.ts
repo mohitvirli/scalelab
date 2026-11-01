@@ -1,31 +1,50 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { DEFAULT_VIZ, isVizId, type VizId } from '../viz/registry'
 
-const HASH = '#live'
-const isLiveHash = () => typeof location !== 'undefined' && location.hash === HASH
+const PREFIX = '#live'
+
+/** "#live" → waterfall, "#live/weather" → weather; anything else is not live. */
+function readHash(): { live: boolean; viz: VizId } {
+  if (typeof location === 'undefined') return { live: false, viz: DEFAULT_VIZ }
+  const [head, sub = ''] = location.hash.split('/')
+  if (head !== PREFIX) return { live: false, viz: DEFAULT_VIZ }
+  return { live: true, viz: isVizId(sub) ? sub : DEFAULT_VIZ }
+}
 
 /**
- * Live mode lives in the URL (`#live`) rather than localStorage, so a second window on the
- * background screen can stay in live mode while your main window stays normal, and a reload or
- * bookmark comes back the same way.
+ * Live mode and its visualization live in the URL (`#live`, `#live/weather`) rather than
+ * localStorage, so a second window on the background screen can stay live on its own
+ * visualization while your main window stays normal, and a reload or bookmark comes back the same.
  */
 export function useLiveMode() {
-  const [live, setLiveState] = useState(isLiveHash)
+  const [state, setState] = useState(readHash)
 
   useEffect(() => {
-    const sync = () => setLiveState(isLiveHash())
+    const sync = () => setState((prev) => {
+      const next = readHash()
+      return next.live ? next : { live: false, viz: prev.viz }
+    })
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
   }, [])
 
-  const setLive = useCallback((on: boolean) => {
+  const write = useCallback((live: boolean, viz: VizId) => {
     const url = new URL(location.href)
-    url.hash = on ? HASH : ''
+    url.hash = live ? (viz === DEFAULT_VIZ ? PREFIX : `${PREFIX}/${viz}`) : ''
     history.replaceState(null, '', url)
-    setLiveState(on)
-    if (!on && document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+    setState({ live, viz })
+    if (!live && document.fullscreenElement) void document.exitFullscreen().catch(() => {})
   }, [])
 
-  return { live, setLive }
+  // Leaving live mode clears the URL; remember the visualization for when you come back.
+  const vizRef = useRef(state.viz)
+  useEffect(() => {
+    vizRef.current = state.viz
+  }, [state.viz])
+  const setLive = useCallback((on: boolean) => write(on, vizRef.current), [write])
+  const setViz = useCallback((viz: VizId) => write(true, viz), [write])
+
+  return { live: state.live, viz: state.viz, setLive, setViz }
 }
 
 export function useFullscreen() {

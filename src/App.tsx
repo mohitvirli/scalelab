@@ -14,9 +14,13 @@ import { useScaleSelection } from './hooks/useScaleSelection'
 import { describeBinding } from './midi/binding'
 import { useMidiInput } from './midi/useMidiInput'
 import { useMidiTrigger } from './midi/useMidiTrigger'
+import { Cymatics } from './viz/cymatics/Cymatics'
+import { NoteBus } from './viz/noteBus'
+import { nextViz, VISUALIZATIONS } from './viz/registry'
+import { Weather } from './viz/weather/Weather'
 import {
-  chordPitchClasses, detectChord, detectChordAuto, flatSpeller, getScale, isAmbiguous, mixedSpeller, pitchClass,
-  rankScales, romanFor, sharpSpeller, spellerFromNotes, suggestNext,
+  chordPitchClasses, chordQuality, detectChord, detectChordAuto, flatSpeller, getScale, isAmbiguous, mixedSpeller, pitchClass,
+  rankScales, romanFor, sharpSpeller, spellerFromNotes, suggestNext, tension, uniquePitchClasses,
   type OctaveNaming, type PlayedChord, type ScaleMatch,
 } from './theory'
 
@@ -56,7 +60,8 @@ export default function App() {
     listeningRef.current = listening
   }, [listening])
 
-  const { live, setLive } = useLiveMode()
+  const { live, viz, setLive, setViz } = useLiveMode()
+  const vizInfo = VISUALIZATIONS.find((v) => v.id === viz)!
   const fullscreen = useFullscreen()
   useWakeLock(live)
   const idle = useIdle(LIVE_IDLE_MS, live)
@@ -64,14 +69,34 @@ export default function App() {
   // Reset can be mapped to any pad/button the controller already sends (see useMidiTrigger).
   const resetRef = useRef(() => {})
   const resetTrigger = useMidiTrigger('scalelab.resetBinding', () => resetRef.current())
+  // A second mappable control cycles visualizations in live mode.
+  const nextVizRef = useRef(() => {})
+  const vizTrigger = useMidiTrigger('scalelab.vizBinding', () => nextVizRef.current())
+  useEffect(() => {
+    nextVizRef.current = () => {
+      if (live) setViz(nextViz(viz))
+    }
+  })
+
+  // Everything the visualizations animate from, read every frame without re-rendering.
+  const [bus] = useState(() => new NoteBus())
 
   const midi = useMidiInput({
-    onNoteOn: ({ note }) => {
+    onNoteOn: ({ note, velocity }) => {
+      bus.noteOn(note, velocity)
       if (listeningRef.current) selection.addPlayed(pitchClass(note))
     },
-    intercept: resetTrigger.intercept,
+    // Whichever control is being learned gets first look.
+    intercept: (data) =>
+      vizTrigger.learning
+        ? vizTrigger.intercept(data) || resetTrigger.intercept(data)
+        : resetTrigger.intercept(data) || vizTrigger.intercept(data),
   })
   const history = useChordHistory(midi.held)
+  useEffect(() => {
+    bus.setHeld(midi.held)
+    bus.setSustain(midi.sustain)
+  }, [bus, midi.held, midi.sustain])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -180,20 +205,48 @@ export default function App() {
     [previewSymbol, next],
   )
 
-  // Shortcuts: L live mode, F fullscreen, R reset, Esc cancels mapping or leaves live mode.
-  const shortcuts = useRef({ live, setLive, resetAll, fullscreen, resetTrigger })
+  // The harmony the visualizations react to: the last thing struck, as the chord display shows it.
+  const lastShown = useRef<readonly number[] | null>(null)
   useEffect(() => {
-    shortcuts.current = { live, setLive, resetAll, fullscreen, resetTrigger }
+    const pcs = uniquePitchClasses(shown)
+    const root = shown.length === 0 ? null : rootPc ?? pitchClass(shown[0])
+    bus.setHarmony({
+      notes: shown,
+      rootPc: root,
+      pcs,
+      quality: root === null ? null : chordQuality(root, pcs),
+      tension: root === null ? 0 : tension(root, pcs),
+      scaleKey: activeScale?.key ?? null,
+      scaleRootPc: activeScale?.rootPc ?? null,
+    }, shown !== lastShown.current && shown.length > 0)
+    lastShown.current = shown
+  }, [bus, shown, rootPc, activeScale])
+
+  // Shortcuts: L live mode, F fullscreen, R reset, Esc cancels mapping or leaves live mode;
+  // in live mode 1–3 pick a visualization and V cycles them.
+  const shortcuts = useRef({ live, viz, setLive, setViz, resetAll, fullscreen, resetTrigger, vizTrigger })
+  useEffect(() => {
+    shortcuts.current = { live, viz, setLive, setViz, resetAll, fullscreen, resetTrigger, vizTrigger }
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
       if (e.target instanceof Element && e.target.closest('input, select, textarea')) return
       const a = shortcuts.current
-      switch (e.key.toLowerCase()) {
+      const key = e.key.toLowerCase()
+      const pick = VISUALIZATIONS[Number(key) - 1]
+      if (a.live && pick) {
+        a.setViz(pick.id)
+        return
+      }
+      switch (key) {
         case 'escape':
           if (a.resetTrigger.learning) a.resetTrigger.cancelLearn()
+          else if (a.vizTrigger.learning) a.vizTrigger.cancelLearn()
           else if (a.live) a.setLive(false)
+          break
+        case 'v':
+          if (a.live) a.setViz(nextViz(a.viz))
           break
         case 'l':
           a.setLive(!a.live)
@@ -216,6 +269,15 @@ export default function App() {
     <div className={`app ${live ? 'app--live' : ''} ${idle ? 'is-idle' : ''}`}>
       {live ? (
         <LiveControls
+          viz={viz}
+          onViz={setViz}
+          onNextViz={() => setViz(nextViz(viz))}
+          vizBinding={vizTrigger.binding ? describeBinding(vizTrigger.binding, naming) : null}
+          vizLearning={vizTrigger.learning}
+          onVizLearn={vizTrigger.startLearn}
+          onVizCancelLearn={vizTrigger.cancelLearn}
+          onVizClearBinding={vizTrigger.clear}
+          pinned={vizTrigger.learning}
           fullscreen={fullscreen.fullscreen}
           fullscreenSupported={fullscreen.supported}
           onFullscreen={fullscreen.toggle}
@@ -247,8 +309,19 @@ export default function App() {
       />
       )}
 
-      <section className="instrument">
+      <section className={`instrument ${live && !vizInfo.keyboard ? 'instrument--bare' : ''}`}>
         {resetCount > 0 && <div key={resetCount} className="toast" role="status">Reset</div>}
+        {live && viz === 'weather' && (
+          <Weather bus={bus} low={KEYBOARD_LOW} high={KEYBOARD_HIGH}>
+            {noDevice && <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} />}
+          </Weather>
+        )}
+        {live && viz === 'cymatics' && (
+          <Cymatics bus={bus}>
+            {noDevice && <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} />}
+          </Cymatics>
+        )}
+        {(!live || viz === 'waterfall') && (
         <Waterfall low={KEYBOARD_LOW} high={KEYBOARD_HIGH} held={midi.held}>
           {live ? (
             // Live mode has no text over the bars, except to say why nothing will show up.
@@ -264,6 +337,8 @@ export default function App() {
             />
           )}
         </Waterfall>
+        )}
+        {(!live || vizInfo.keyboard) && (
         <Keyboard
           low={KEYBOARD_LOW}
           high={KEYBOARD_HIGH}
@@ -277,6 +352,7 @@ export default function App() {
           spell={chordSpell}
           onKeyClick={live ? undefined : (n) => selection.toggle(pitchClass(n))}
         />
+        )}
       </section>
 
       {!live && (
