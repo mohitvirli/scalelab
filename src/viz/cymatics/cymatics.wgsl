@@ -1,10 +1,14 @@
-// Chladni-plate sand. A compute pass moves each grain towards the plate's still (nodal) lines and
-// shakes it where the plate vibrates; a render pass draws every grain as a tiny quad.
+// Chladni-plate sand across the whole screen. A compute pass pulls each grain onto the plate's still
+// (nodal) lines and jitters it where the plate vibrates; a render pass draws every grain as a tiny quad.
 
 const PI = 3.14159265;
 const MAX_MODES = 12u;
-/** Zooms the pattern so even a lone note fills the screen with a few cells. */
+/** Base zoom so even a lone note fills the screen with a few cells; the register zoom multiplies it. */
 const ZOOM = 1.35;
+/** Largest Newton step towards a nodal line, in screen units, so grains never leap across the screen. */
+const MAX_STEP = 0.1;
+/** How fast grains slide onto the lines (per second): about a second to form a figure. */
+const SETTLE = 4.5;
 
 struct Params {
   time: f32,
@@ -17,6 +21,10 @@ struct Params {
   modeCount: u32,
   // xy = n, m; z = weight.
   modes: array<vec4f, MAX_MODES>,
+  // Register zoom: higher notes make finer figures.
+  zoom: f32,
+  burst: f32,
+  _pad: vec2f,
 }
 
 struct View {
@@ -28,8 +36,14 @@ struct View {
   moving: vec4f,
 }
 
+// p.xy position (screen units: y in -1..1), v.xy velocity; a = smoothed plate amplitude under the grain.
+struct Grain {
+  pv: vec4f,
+  a: vec4f,
+}
+
 @group(0) @binding(0) var<uniform> P: Params;
-@group(0) @binding(1) var<storage, read_write> grains: array<vec4f>;
+@group(0) @binding(1) var<storage, read_write> grains: array<Grain>;
 
 // Symmetric free-plate mode: n half-waves one way, m the other, plus its mirror.
 fn plate(p: vec2f, n: f32, m: f32) -> f32 {
@@ -37,16 +51,21 @@ fn plate(p: vec2f, n: f32, m: f32) -> f32 {
   return cos(n * a.x) * cos(m * a.y) + cos(m * a.x) * cos(n * a.y);
 }
 
+// Plate displacement at q (screen units), turned by the root's angle and zoomed by register.
 fn field(q: vec2f) -> f32 {
   let c = cos(P.angle);
   let s = sin(P.angle);
-  let p = vec2f(c * q.x - s * q.y, s * q.x + c * q.y) * ZOOM;
+  let p = vec2f(c * q.x - s * q.y, s * q.x + c * q.y) * ZOOM * P.zoom;
   var f = 0.0;
   for (var i = 0u; i < P.modeCount; i++) {
     let md = P.modes[i];
     f += md.z * plate(p, md.x, md.y);
   }
   return f;
+}
+
+fn wrap(x: f32, half: f32) -> f32 {
+  return x - 2.0 * half * floor((x + half) / (2.0 * half));
 }
 
 fn hash(v: u32) -> f32 {
@@ -56,42 +75,59 @@ fn hash(v: u32) -> f32 {
   return f32(x) / 4294967295.0;
 }
 
-fn wrap(x: f32, half: f32) -> f32 {
-  return x - 2.0 * half * floor((x + half) / (2.0 * half));
-}
-
 @compute @workgroup_size(256)
 fn step(@builtin(global_invocation_id) id: vec3u) {
   let i = id.x;
   if (i >= P.count) { return; }
   var g = grains[i];
-  var p = g.xy;
-  var v = g.zw;
+  var p = g.pv.xy;
+  var v = g.pv.zw;
+  let dt = P.dt;
 
   let seed = i * 1664525u + u32(P.time * 60.0) * 1013904223u;
   let jitter = vec2f(hash(seed), hash(seed ^ 0x9e3779b9u)) * 2.0 - 1.0;
 
-  var shake = P.kick;
+  var amp = 0.0;
   if (P.modeCount > 0u) {
-    let f = field(p);
+    let q = p;
+    let f = field(q);
     let e = 0.002;
     let grad = vec2f(
-      field(p + vec2f(e, 0.0)) - field(p - vec2f(e, 0.0)),
-      field(p + vec2f(0.0, e)) - field(p - vec2f(0.0, e)),
+      field(q + vec2f(e, 0.0)) - field(q - vec2f(e, 0.0)),
+      field(q + vec2f(0.0, e)) - field(q - vec2f(0.0, e)),
     ) / (2.0 * e);
-    let len = length(grad) + 1e-3;
-    // Slide downhill on |f|: towards the lines where the plate stays still.
-    v -= sign(f) * (grad / len) * min(abs(f), 0.5) * 3.0 * P.dt;
-    shake += abs(f) * P.shake;
+    amp = abs(f);
+
+    // Newton step onto the nearest still line (f = 0). Near a line this converges fast, which keeps
+    // lines thin; the clamp stops grains on flat antinodes from jumping across the plate.
+    var d = -f * grad / (dot(grad, grad) + 0.05);
+    let dl = length(d);
+    if (dl > MAX_STEP) { d *= MAX_STEP / dl; }
+    p += d * (1.0 - exp(-SETTLE * dt));
+
+    // The vibrating plate tosses grains in proportion to how much it moves under them. Tension
+    // (P.shake) and fresh notes (P.kick) toss harder, so dissonant figures stay fuzzy and restless.
+    let toss = amp * (0.12 + P.shake * 0.22 + P.kick * 0.12) + 0.004;
+    p += jitter * toss * sqrt(dt);
+  } else {
+    // No chord: the plate is still, sand only feels note kicks.
+    p += jitter * P.kick * 0.02 * sqrt(dt);
   }
-  v += jitter * shake * 9.0 * P.dt;
-  v *= exp(-7.0 * P.dt);
-  p += v * P.dt;
-  grains[i] = vec4f(wrap(p.x, P.aspect), wrap(p.y, 1.0), v);
+
+  // A new chord throws the sand up; it lands in the new figure.
+  v += jitter * P.burst * (0.6 + amp) * 6.0 * dt;
+  v *= exp(-6.0 * dt);
+  p += v * dt;
+
+  let a = mix(g.a.x, amp, 1.0 - exp(-8.0 * dt));
+  // Grains leaving one edge come back at the other.
+  grains[i] = Grain(vec4f(wrap(p.x, P.aspect), wrap(p.y, 1.0), v), vec4f(a, g.a.yzw));
 }
 
+// ---------- Render ----------
+
 @group(0) @binding(0) var<uniform> V: View;
-@group(0) @binding(1) var<storage, read> sand: array<vec4f>;
+@group(0) @binding(1) var<storage, read> sand: array<Grain>;
 
 struct VOut {
   @builtin(position) pos: vec4f,
@@ -106,10 +142,13 @@ fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> VOut 
   );
   let g = sand[ii];
   let corner = corners[vi];
+  // Grains vary a little in size (stored per grain in a.y), which reads as sand rather than dots.
+  let size = g.a.y;
   var out: VOut;
-  out.pos = vec4f(g.x / V.aspect + corner.x * V.sizeX, g.y + corner.y * V.sizeY, 0.0, 1.0);
-  // Settled grains are sand-coloured; grains still dancing pick up the held-note colour.
-  out.color = mix(V.sand, V.moving, clamp(length(g.zw) * 5.0, 0.0, 1.0));
+  out.pos = vec4f(g.pv.x / V.aspect + corner.x * V.sizeX * size, g.pv.y + corner.y * V.sizeY * size, 0.0, 1.0);
+  // Settled grains are sand-coloured; grains on a moving part of the plate pick up the held-note colour.
+  let moving = clamp(g.a.x * 1.6 + length(g.pv.zw) * 4.0, 0.0, 1.0);
+  out.color = mix(V.sand, V.moving, moving);
   return out;
 }
 
