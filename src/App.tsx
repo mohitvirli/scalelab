@@ -25,6 +25,7 @@ const KEYBOARD_LOW = 36
 const KEYBOARD_HIGH = 96
 /** Below this many selected notes, the top scale guess is too weak to tint the keyboard with. */
 const MIN_NOTES_FOR_TINT = 3
+const NO_PCS: ReadonlySet<number> = new Set()
 /** Live mode hides the cursor and its corner controls after this long without mouse movement. */
 const LIVE_IDLE_MS = 2500
 
@@ -157,18 +158,18 @@ export default function App() {
 
   // Suggestions need a key. With no scale yet, assume the chord is home: C → C major, Am → A minor.
   const progressionScale = useMemo(() => {
-    if (activeScale) return { scale: activeScale, status: locked ? 'locked' as const : 'likely' as const }
+    if (activeScale) return activeScale
     if (!lastChord) return null
     const r = lastChord.rootPc
     const minor = lastChord.pcs.includes((r + 3) % 12) && !lastChord.pcs.includes((r + 4) % 12)
-    return { scale: getScale(r, minor ? 'minor' : 'major'), status: 'assumed' as const }
-  }, [activeScale, locked, lastChord])
+    return getScale(r, minor ? 'minor' : 'major')
+  }, [activeScale, lastChord])
   const next = useMemo(
-    () => (progressionScale && lastChord ? suggestNext(progressionScale.scale, lastChord, played) : []),
+    () => (progressionScale && lastChord ? suggestNext(progressionScale, lastChord, played) : []),
     [progressionScale, lastChord, played],
   )
   const playedItems = useMemo(
-    () => played.map((p) => ({ ...p, roman: progressionScale ? romanFor(progressionScale.scale.root, p.symbol) : '' })),
+    () => played.map((p) => ({ ...p, roman: progressionScale ? romanFor(progressionScale.root, p.symbol) : '' })),
     [played, progressionScale],
   )
 
@@ -262,13 +263,14 @@ export default function App() {
           low={KEYBOARD_LOW}
           high={KEYBOARD_HIGH}
           held={midi.held}
-          scalePcs={scalePcs}
-          selectedPcs={selection.selected}
+          // Live mode: just the notes. No scale tint, selected-key dots or key toggling.
+          scalePcs={live ? null : scalePcs}
+          selectedPcs={live ? NO_PCS : selection.selected}
           rootPc={rootPc}
           preview={preview}
           naming={naming}
           spell={chordSpell}
-          onKeyClick={(n) => selection.toggle(pitchClass(n))}
+          onKeyClick={live ? undefined : (n) => selection.toggle(pitchClass(n))}
         />
       </section>
 
@@ -282,13 +284,14 @@ export default function App() {
       </div>
       )}
 
+      {!live && (
       <ProgressionPanel
         played={playedItems}
         next={next}
-        scale={progressionScale && { name: progressionScale.scale.name, status: progressionScale.status }}
-        live={live}
+        scaleName={progressionScale?.name ?? null}
         onPreview={setPreviewSymbol}
       />
+      )}
 
       {!live && (
       <ScalePanel

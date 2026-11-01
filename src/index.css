@@ -722,8 +722,8 @@ button, select, input { font: inherit; color: inherit; }
   height: 100dvh;
   max-width: none;
   padding: 14px;
-  grid-template-rows: minmax(0, 1fr) auto;
-  row-gap: 12px;
+  /* Just the instrument: chord, waterfall and keys. */
+  grid-template-rows: minmax(0, 1fr);
 }
 .app--live .instrument { grid-template-rows: minmax(0, 1fr) auto; }
 .app--live .keyboard { height: clamp(110px, 20vh, 240px); }
@@ -734,25 +734,6 @@ button, select, input { font: inherit; color: inherit; }
 .app--live .hero__detail { font-size: clamp(18px, 2vw, 30px); }
 .app--live .hero__notes { font-size: clamp(16px, 1.6vw, 26px); }
 .app--live .hero__alts { display: none; }
-
-.app--live .prog { grid-template-columns: minmax(0, 0.7fr) minmax(0, 2fr) min(42%, 640px); height: 120px; margin: 0; }
-.app--live .prog__section { padding: 14px 22px; justify-content: center; }
-.app--live .prog__sym { font-size: 40px; }
-.app--live .prog__roman { font-size: 15px; }
-.app--live .prog__chip { height: 66px; }
-.app--live .prog__chip .prog__sym { font-size: 30px; }
-.app--live .prog__track { gap: 32px; }
-.prog__scale-name {
-  font-family: var(--display);
-  font-size: clamp(22px, 2.2vw, 34px);
-  font-weight: 500;
-  line-height: 1.1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--scale);
-}
-.prog__scale-name .acc { font-size: 0.7em; vertical-align: 0.35em; }
 
 .live-controls {
   position: fixed;

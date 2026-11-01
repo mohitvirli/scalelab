@@ -12,29 +12,18 @@ interface ProgressionPanelProps {
   played: PlayedItem[]
   next: ChordSuggestion[]
   /** The scale the numerals and suggestions are relative to. */
-  scale: { name: string; status: 'locked' | 'likely' | 'assumed' } | null
-  /** Live mode: bigger type, and the scale gets its own section. */
-  live?: boolean
+  scaleName: string | null
   /** Hovering a suggestion previews it on the keyboard. */
   onPreview?: (symbol: string | null) => void
 }
-
-const STATUS_LABEL = { locked: 'Locked', likely: 'Likely', assumed: 'Guessing from the chord' }
 
 /**
  * Chords played so far and the likely next ones. Fixed height, single line: a new chord or a
  * longer name never pushes the rest of the page around.
  */
-export function ProgressionPanel({ played, next, scale, live = false, onPreview }: ProgressionPanelProps) {
+export function ProgressionPanel({ played, next, scaleName, onPreview }: ProgressionPanelProps) {
   return (
-    <section className={`panel prog ${live ? 'prog--live' : ''}`} aria-label="Chord progression">
-      {live && (
-        <div className="prog__section prog__scale">
-          <h2>{scale ? STATUS_LABEL[scale.status] : 'Scale'}</h2>
-          <div className="prog__scale-name">{scale ? <Accidentals text={scale.name} /> : <span className="prog__empty">—</span>}</div>
-        </div>
-      )}
-
+    <section className="panel prog" aria-label="Chord progression">
       <div className="prog__section prog__played">
         <h2>Played</h2>
         {played.length === 0 ? (
@@ -54,7 +43,7 @@ export function ProgressionPanel({ played, next, scale, live = false, onPreview 
       <div className="prog__section prog__next">
         <h2>
           Next
-          {!live && scale && <span className="prog__in"> in {pretty(scale.name)}</span>}
+          {scaleName && <span className="prog__in"> in {pretty(scaleName)}</span>}
         </h2>
         {next.length === 0 ? (
           <p className="prog__empty">Play a chord</p>
