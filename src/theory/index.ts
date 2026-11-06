@@ -1,5 +1,6 @@
 export * from './notes'
 export * from './chords'
+export * from './chordSearch'
 export * from './scales'
 export * from './diatonic'
 export * from './progressions'

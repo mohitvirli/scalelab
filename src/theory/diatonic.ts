@@ -1,5 +1,5 @@
 import { Chord, Key, Mode, Note } from 'tonal'
-import { formatSymbol } from './chords'
+import { chordPitchClasses, formatSymbol } from './chords'
 import type { ScaleMatch, ScaleTypeId } from './scales'
 
 export interface DiatonicChord {
@@ -55,4 +55,30 @@ export function diatonicChords(scale: Pick<ScaleMatch, 'root' | 'type'>): Diaton
     seventh: formatSymbol(sevenths[i]),
     rootPc: Note.chroma(Chord.get(triad).tonic ?? '')!,
   }))
+}
+
+export interface AvailableChord {
+  symbol: string
+  roman: string
+  rootPc: number
+  played: boolean
+}
+
+/**
+ * The chords of a scale in scale-degree order, marked if played. Extensions and inversions count:
+ * Dm7 and Dm/F both play the ii in C major. D major doesn't, since it has an F♯.
+ */
+export function availableChords(
+  scale: Pick<ScaleMatch, 'root' | 'type'>,
+  played: readonly { rootPc: number; pcs: readonly number[] }[],
+): AvailableChord[] {
+  return diatonicChords(scale).map(({ triad, roman, rootPc }) => {
+    const tones = chordPitchClasses(triad)
+    return {
+      symbol: triad,
+      roman,
+      rootPc,
+      played: played.some((p) => p.rootPc === rootPc && tones.every((pc) => p.pcs.includes(pc))),
+    }
+  })
 }

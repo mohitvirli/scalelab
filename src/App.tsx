@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChordDisplay } from './components/ChordDisplay'
+import { ChordSearch } from './components/ChordSearch'
 import { Header, type Accidentals, type Theme } from './components/Header'
 import { Keyboard } from './components/Keyboard'
 import { LiveControls } from './components/LiveControls'
@@ -20,7 +21,7 @@ import { NoteBus } from './viz/noteBus'
 import { nextViz, VISUALIZATIONS } from './viz/registry'
 import { Weather } from './viz/weather/Weather'
 import {
-  chordPitchClasses, chordQuality, detectChord, detectChordAuto, flatSpeller, getScale, isAmbiguous, mixedSpeller, pitchClass,
+  availableChords, chordQuality, chordVoicing, chordVoicingNear, detectChord, detectChordAuto, flatSpeller, getScale, isAmbiguous, mixedSpeller, pitchClass,
   rankScales, romanFor, sharpSpeller, spellerFromNotes, suggestNext, tension, uniquePitchClasses,
   type OctaveNaming, type PlayedChord, type ScaleMatch,
 } from './theory'
@@ -34,17 +35,6 @@ const NO_PCS: ReadonlySet<number> = new Set()
 /** Live mode hides the cursor and its corner controls after this long without mouse movement. */
 const LIVE_IDLE_MS = 2500
 
-/** Root-position voicing of a chord symbol from the C2 octave up, for previewing on the keyboard. */
-function voicing(symbol: string): number[] {
-  const out: number[] = []
-  for (const pc of chordPitchClasses(symbol)) {
-    let n = 48 + pc
-    while (out.length > 0 && n <= out[out.length - 1]) n += 12
-    out.push(n)
-  }
-  return out
-}
-
 const prefersLight = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-color-scheme: light)').matches
 
 export default function App() {
@@ -53,6 +43,8 @@ export default function App() {
   const [accidentals, setAccidentals] = usePersistentState<Accidentals>('scalelab.spelling', 'auto')
   const [listening, setListening] = usePersistentState('scalelab.collect', true)
   const [locked, setLocked] = useState<ScaleMatch | null>(null)
+  const [pinnedChord, setPinnedChord] = useState<string | null>(null)
+  const [searchPreview, setSearchPreview] = useState<string | null>(null)
 
   const selection = useScaleSelection()
   const { addBass } = selection
@@ -129,13 +121,14 @@ export default function App() {
     setShown([])
   }
 
-  // Start fresh, e.g. between songs: notes, chord, history, selected keys and the scale lock.
+  // Start fresh, e.g. between songs: notes, chord, history, selected keys, scale lock and pinned chord.
   const [resetCount, setResetCount] = useState(0)
   const resetAll = () => {
     clearNotes()
     history.clear()
     selection.reset()
     setLocked(null)
+    setPinnedChord(null)
     setResetCount((n) => n + 1)
   }
   useEffect(() => {
@@ -172,17 +165,23 @@ export default function App() {
 
   // Chords played, named with the same spelling rules as the big display. Repeats collapse into one.
   const played = useMemo(() => {
-    const out: (PlayedChord & { id: number })[] = []
+    const out: (PlayedChord & { id: number; notes: readonly number[] })[] = []
     for (const e of history.entries) {
       const d = autoSpelling ? detectChordAuto(e.notes).detection : detectChord(e.notes, spell)
-      if (d.kind !== 'chord' || out.at(-1)?.symbol === d.best.symbol) continue
-      out.push({ id: e.id, symbol: d.best.symbol, rootPc: d.best.rootPc, pcs: d.best.pcs })
+      if (d.kind !== 'chord') continue
+      const last = out.at(-1)
+      if (last?.symbol === d.best.symbol) {
+        // Same chord again, maybe somewhere else on the keyboard: suggestions follow the hand.
+        last.notes = e.notes
+        continue
+      }
+      out.push({ id: e.id, symbol: d.best.symbol, rootPc: d.best.rootPc, pcs: d.best.pcs, notes: e.notes })
     }
     return out
   }, [history.entries, autoSpelling, spell])
   const lastChord = played.at(-1) ?? null
 
-  // Suggestions need a key. With no scale yet, assume the chord is home: C → C major, Am → A minor.
+  // Available chords need a key. With no scale yet, assume the chord is home: C → C major, Am → A minor.
   const progressionScale = useMemo(() => {
     if (activeScale) return activeScale
     if (!lastChord) return null
@@ -190,20 +189,38 @@ export default function App() {
     const minor = lastChord.pcs.includes((r + 3) % 12) && !lastChord.pcs.includes((r + 4) % 12)
     return getScale(r, minor ? 'minor' : 'major')
   }, [activeScale, lastChord])
-  const next = useMemo(
-    () => (progressionScale && lastChord ? suggestNext(progressionScale, lastChord, played) : []),
-    [progressionScale, lastChord, played],
+  const available = useMemo(
+    () => (progressionScale ? availableChords(progressionScale, played) : []),
+    [progressionScale, played],
   )
   const playedItems = useMemo(
     () => played.map((p) => ({ ...p, roman: progressionScale ? romanFor(progressionScale.root, p.symbol) : '' })),
     [played, progressionScale],
   )
 
+  // Off on every load: it only shows when asked for.
+  const [suggesting, setSuggesting] = useState(false)
+  const suggestion = useMemo(
+    () => (suggesting && progressionScale && lastChord ? suggestNext(progressionScale, lastChord, played, 1)[0] ?? null : null),
+    [suggesting, progressionScale, lastChord, played],
+  )
+
   const [previewSymbol, setPreviewSymbol] = useState<string | null>(null)
-  // Only while that chip still exists: if the list changes under the pointer, no leave event fires.
-  const preview = useMemo(
-    () => (previewSymbol && next.some((s) => s.symbol === previewSymbol) ? voicing(previewSymbol) : []),
-    [previewSymbol, next],
+  // An available chord only while that chip still exists: if the list changes under the pointer, no
+  // leave event fires. Otherwise the search result being looked at, then the chord picked from the search.
+  const availablePreview = previewSymbol && available.some((c) => c.symbol === previewSymbol) ? previewSymbol : null
+  const previewChord = availablePreview ?? searchPreview ?? pinnedChord
+  // Chords from the list and the suggestion sit where you're playing, in the closest inversion. The
+  // search shows a fixed voicing: a pinned chord shouldn't jump around under you as you play.
+  const lastNotes = lastChord?.notes
+  const preview = useMemo(() => {
+    if (availablePreview) return chordVoicingNear(availablePreview, lastNotes ?? [], KEYBOARD_LOW, KEYBOARD_HIGH)
+    return previewChord ? chordVoicing(previewChord) : []
+  }, [availablePreview, previewChord, lastNotes])
+  // Anything you're deliberately looking at takes over the keys from the suggestion.
+  const suggestedNotes = useMemo(
+    () => (suggestion && !previewChord ? chordVoicingNear(suggestion.symbol, lastNotes ?? [], KEYBOARD_LOW, KEYBOARD_HIGH) : []),
+    [suggestion, previewChord, lastNotes],
   )
 
   // The harmony the visualizations react to: the last thing struck, as the chord display shows it.
@@ -353,7 +370,8 @@ export default function App() {
           scalePcs={live ? null : scalePcs}
           selectedPcs={live ? NO_PCS : selection.selected}
           rootPc={rootPc}
-          preview={preview}
+          preview={live ? undefined : preview}
+          suggested={live ? undefined : suggestedNotes}
           naming={naming}
           spell={chordSpell}
           onKeyClick={live ? undefined : (n) => selection.toggle(pitchClass(n))}
@@ -362,19 +380,26 @@ export default function App() {
       </section>
 
       {!live && (
+      <div className="chordbar">
+      <ChordSearch spell={spell} pinned={pinnedChord} onPin={setPinnedChord} onPreview={setSearchPreview} />
       <div className="legend" aria-hidden>
         <span><i className="lg lg--held" /> Held</span>
         <span><i className="lg lg--scale" /> {activeScale ? `${locked ? 'Locked' : 'Likely'} scale` : 'Scale'}</span>
         <span><i className="lg lg--dot" /> Selected key</span>
         <span><i className="lg lg--root">R</i> Chord root</span>
-        <span><i className="lg lg--preview" /> Suggested chord</span>
+        <span><i className="lg lg--preview" /> Chord preview</span>
+        {suggestion && <span><i className="lg lg--suggest" /> Suggested next</span>}
+      </div>
       </div>
       )}
 
       {!live && (
       <ProgressionPanel
         played={playedItems}
-        next={next}
+        available={available}
+        suggesting={suggesting}
+        onToggleSuggest={() => setSuggesting((on) => !on)}
+        suggestion={suggestion}
         scaleName={progressionScale?.name ?? null}
         onPreview={setPreviewSymbol}
       />

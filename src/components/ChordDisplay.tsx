@@ -66,20 +66,22 @@ export function ChordDisplay({ detection, notes, stale, naming, spell, idle }: C
           <span className="hero__extra">+{detection.extra.map(pretty).join(' ')}</span>
         )}
       </div>
-      <p className="hero__detail">{pretty(detail)}</p>
-      <p className="hero__notes">
-        {notes.map((n) => (
-          <span key={n}>{pretty(midiToName(n, naming, spell))}</span>
-        ))}
-      </p>
-      {alternatives.length > 0 && (
-        <p className="hero__alts">
-          <span className="hero__alts-label">also</span>
-          {alternatives.map((a) => (
-            <span key={a} className="chip"><Accidentals text={a} /></span>
+      <div className="hero__meta">
+        <p className="hero__detail">{pretty(detail)}</p>
+        <p className="hero__notes">
+          {notes.map((n) => (
+            <span key={n}>{pretty(midiToName(n, naming, spell))}</span>
           ))}
         </p>
-      )}
+        {alternatives.length > 0 && (
+          <p className="hero__alts">
+            <span className="hero__alts-label">also</span>
+            {alternatives.map((a) => (
+              <span key={a} className="chip"><Accidentals text={a} /></span>
+            ))}
+          </p>
+        )}
+      </div>
     </section>
   )
 }

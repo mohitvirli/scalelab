@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { midiToName, octaveOf, pitchClass, prettyAccidentals, type OctaveNaming, type Speller } from '../theory'
+import { midiToName, octaveOf, pitchClass, prettyAccidentals, type OctaveNaming, type Speller, type VoicedNote } from '../theory'
 import { keyLayout } from './keyLayout'
 
 export interface KeyboardProps {
@@ -13,17 +13,20 @@ export interface KeyboardProps {
   selectedPcs: ReadonlySet<number>
   /** Chord root pitch class (marked on held keys). */
   rootPc: number | null
-  /** Extra keys to highlight, e.g. a hovered chord suggestion. */
-  preview?: readonly number[]
+  /** A chord to show on the keys, e.g. a hovered suggestion or a chord from the search. */
+  preview?: readonly VoicedNote[]
+  /** The suggested next chord: ringed rather than filled, so it stays out of the way while playing. */
+  suggested?: readonly VoicedNote[]
   naming: OctaveNaming
   spell: Speller
   onKeyClick?: (midi: number) => void
 }
 
-export function Keyboard({ low, high, held, scalePcs, selectedPcs, rootPc, preview = [], naming, spell, onKeyClick }: KeyboardProps) {
+export function Keyboard({ low, high, held, scalePcs, selectedPcs, rootPc, preview = [], suggested = [], naming, spell, onKeyClick }: KeyboardProps) {
   const layout = useMemo(() => keyLayout(low, high), [low, high])
   const heldSet = new Set(held)
-  const previewSet = new Set(preview)
+  const previewByMidi = new Map(preview.map((n) => [n.midi, n]))
+  const suggestedByMidi = new Map(suggested.map((n) => [n.midi, n]))
   const below = held.filter((n) => n < low).length
   const above = held.filter((n) => n > high).length
 
@@ -35,11 +38,14 @@ export function Keyboard({ low, high, held, scalePcs, selectedPcs, rootPc, previ
         const pc = pitchClass(midi)
         const name = midiToName(midi, naming, spell)
         const isHeld = heldSet.has(midi)
+        const previewed = previewByMidi.get(midi)
+        const suggestedNote = suggestedByMidi.get(midi)
         const classes = [
           'key',
           black ? 'key--black' : 'key--white',
           isHeld && 'is-held',
-          previewSet.has(midi) && 'is-preview',
+          previewed && 'is-preview',
+          suggestedNote && 'is-suggested',
           scalePcs?.has(pc) && 'in-scale',
         ].filter(Boolean).join(' ')
 
@@ -56,8 +62,13 @@ export function Keyboard({ low, high, held, scalePcs, selectedPcs, rootPc, previ
           >
             {selectedPcs.has(pc) && <span className="key__dot" />}
             {isHeld && rootPc === pc && <span className="key__root">R</span>}
+            {!isHeld && previewed?.root && <span className="key__root key__root--preview">R</span>}
             {isHeld ? (
               <span className="key__label key__label--held">{prettyAccidentals(spell(pc))}</span>
+            ) : previewed ? (
+              <span className="key__label key__label--preview">{prettyAccidentals(previewed.name)}</span>
+            ) : suggestedNote ? (
+              <span className="key__label key__label--suggested">{prettyAccidentals(suggestedNote.name)}</span>
             ) : (
               pc === 0 && <span className="key__label">C{octaveOf(midi, naming)}</span>
             )}

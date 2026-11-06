@@ -30,6 +30,8 @@ const TIER_1 = new Set([
   '6', 'm6', '69', 'm69', '9', 'maj9', 'm9', 'Madd9', 'madd9', '7sus4', '11', 'm11', '13', 'maj13', 'm13',
   'm/ma7', '7no5', '7b9', '7#9', '7#11', 'maj7#11', '7b5', '7#5', '5',
 ])
+/** Everyday chord types, likeliest first, keyed by tonal's first alias. */
+export const COMMON_CHORD_TYPES: readonly string[] = [...TIER_0, ...TIER_1]
 const TIER_PENALTY = [0, 1, 5]
 const BASS_PENALTY = { root: 0, chordTone: 1.5, foreign: 2.5 }
 
@@ -150,6 +152,69 @@ export function detectChord(midiNotes: Iterable<number>, spell: Speller = sharpS
 /** The pitch classes of any chord symbol, e.g. for previewing a suggested chord. */
 export function chordPitchClasses(symbol: string): number[] {
   return Chord.get(symbol).notes.map((n) => Note.chroma(n)!)
+}
+
+export interface VoicedNote {
+  midi: number
+  /** Spelled the way the chord spells it, e.g. "Eb" in Cm. */
+  name: string
+  root: boolean
+}
+
+/** Stacks notes upward from `start` (the first note's MIDI number), each the next one above the last. */
+function stack(notes: readonly string[], start: number, rootPc: number | undefined): VoicedNote[] {
+  const out: VoicedNote[] = []
+  for (const name of notes) {
+    const pc = Note.chroma(name)!
+    let midi = out.length === 0 ? start : out[out.length - 1].midi - pitchClass(out[out.length - 1].midi) + pc
+    while (out.length > 0 && midi <= out[out.length - 1].midi) midi += 12
+    out.push({ midi, name, root: pc === rootPc })
+  }
+  return out
+}
+
+/** A chord stacked upward from the C2 octave (bass first for slash chords), for showing on the keyboard. */
+export function chordVoicing(symbol: string): VoicedNote[] {
+  const chord = Chord.get(symbol)
+  if (chord.notes.length === 0) return []
+  const rootPc = chord.tonic ? Note.chroma(chord.tonic) : undefined
+  return stack(chord.notes, 48 + Note.chroma(chord.notes[0])!, rootPc)
+}
+
+/** How far apart two sets of notes are: each note's distance to the nearest in the other set, both ways. */
+function voiceDistance(a: readonly number[], b: readonly number[]): number {
+  const oneWay = (from: readonly number[], to: readonly number[]) =>
+    from.reduce((sum, n) => sum + Math.min(...to.map((m) => Math.abs(n - m))), 0)
+  return oneWay(a, b) + oneWay(b, a)
+}
+
+/**
+ * A chord in whichever octave and inversion sits closest to the notes in `near`, the way you'd move
+ * between chords with your hand: from Bb D F, Eb becomes Bb Eb G right there, not Eb G Bb an octave
+ * off. Ties go to root position. A slash chord keeps its bass lowest. Stays within `low`..`high`.
+ */
+export function chordVoicingNear(symbol: string, near: readonly number[], low: number, high: number): VoicedNote[] {
+  const chord = Chord.get(symbol)
+  if (near.length === 0 || chord.notes.length === 0) return chordVoicing(symbol)
+  const rootPc = chord.tonic ? Note.chroma(chord.tonic) : undefined
+  const inversions = chord.bass ? 1 : chord.notes.length
+
+  let best: VoicedNote[] | null = null
+  let bestCost = Infinity
+  for (let i = 0; i < inversions; i++) {
+    const notes = [...chord.notes.slice(i), ...chord.notes.slice(0, i)]
+    const firstPc = Note.chroma(notes[0])!
+    for (let start = low + pitchClass(firstPc - low); start <= high; start += 12) {
+      const voiced = stack(notes, start, rootPc)
+      if (voiced[voiced.length - 1].midi > high) break
+      const cost = voiceDistance(voiced.map((n) => n.midi), near)
+      if (cost < bestCost) {
+        best = voiced
+        bestCost = cost
+      }
+    }
+  }
+  return best ?? chordVoicing(symbol)
 }
 
 /**
