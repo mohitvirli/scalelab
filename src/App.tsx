@@ -15,6 +15,7 @@ import { describeBinding } from './midi/binding'
 import { useMidiInput } from './midi/useMidiInput'
 import { useMidiTrigger } from './midi/useMidiTrigger'
 import { Cymatics } from './viz/cymatics/Cymatics'
+import { Water } from './viz/water/Water'
 import { NoteBus } from './viz/noteBus'
 import { nextViz, VISUALIZATIONS } from './viz/registry'
 import { Weather } from './viz/weather/Weather'
@@ -315,6 +316,11 @@ export default function App() {
           <Weather bus={bus} low={KEYBOARD_LOW} high={KEYBOARD_HIGH}>
             {noDevice && <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} />}
           </Weather>
+        )}
+        {live && viz === 'water' && (
+          <Water bus={bus}>
+            {noDevice && <MidiEmptyState status={midi.status} error={midi.error} onRetry={midi.retry} />}
+          </Water>
         )}
         {live && viz === 'cymatics' && (
           <Cymatics bus={bus}>

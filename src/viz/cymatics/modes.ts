@@ -32,22 +32,32 @@ const MAX_WAVES = 32
  * interval's just ratio times 2 per octave above (or ÷2 per octave below): adding C4 to C3 adds a 2:1
  * mode, G4 over C3 is 3:1. Equal modes (n×m and m×n are the same shape) merge; weights sum to 1.
  */
+/**
+ * Just ratio [n, m] (n/m) of a note `diff` semitones from the root note, with octaves doubling it
+ * (or halving below). Octaves are dropped towards the root's octave once a side would pass MAX_WAVES.
+ */
+export function ratioFor(diff: number): [number, number] {
+  const [p, q] = RATIOS[((diff % 12) + 12) % 12]
+  let k = Math.floor(diff / 12)
+  while (k !== 0 && Math.max(p, q) * 2 ** Math.abs(k) > MAX_WAVES) k -= Math.sign(k)
+  const n = p * 2 ** Math.max(k, 0)
+  const m = q * 2 ** Math.max(-k, 0)
+  const g = gcd(n, m)
+  return [n / g, m / g]
+}
+
+/** The lowest note with the root's pitch class (or the lowest note): ratios are measured from it. */
+export function rootNote(rootPc: number, sorted: readonly number[]): number {
+  return sorted.find((n) => (((n - rootPc) % 12) + 12) % 12 === 0) ?? sorted[0]
+}
+
 export function noteModes(rootPc: number, notes: readonly number[]): PlateMode[] {
   const sorted = [...new Set(notes)].sort((a, b) => a - b)
   if (sorted.length === 0) return []
-  const ref = sorted.find((n) => (((n - rootPc) % 12) + 12) % 12 === 0) ?? sorted[0]
+  const ref = rootNote(rootPc, sorted)
   const merged = new Map<string, PlateMode>()
   for (const note of sorted) {
-    const diff = note - ref
-    const [p, q] = RATIOS[((diff % 12) + 12) % 12]
-    let k = Math.floor(diff / 12)
-    // Drop octaves (towards the root's octave) until the figure stays readable.
-    while (k !== 0 && Math.max(p, q) * 2 ** Math.abs(k) > MAX_WAVES) k -= Math.sign(k)
-    let n = p * 2 ** Math.max(k, 0)
-    let m = q * 2 ** Math.max(-k, 0)
-    const g = gcd(n, m)
-    n /= g
-    m /= g
+    const [n, m] = ratioFor(note - ref)
     const key = `${Math.max(n, m)}:${Math.min(n, m)}`
     const mode = merged.get(key) ?? { n, m, weight: 0 }
     mode.weight += 1 / sorted.length
