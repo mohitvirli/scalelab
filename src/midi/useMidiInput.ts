@@ -117,6 +117,25 @@ export function useMidiInput({
     flush()
   }, [flush])
 
+  /** A key goes down: from the controller, or from the on-screen keyboard. */
+  const press = useCallback(
+    (note: number, velocity: number, channel = 0) => {
+      down.current.add(note)
+      if (pedal.current) sustained.current.add(note)
+      onNoteOnRef.current?.({ note, velocity, channel })
+      flush()
+    },
+    [flush],
+  )
+
+  const release = useCallback(
+    (note: number) => {
+      down.current.delete(note)
+      flush()
+    },
+    [flush],
+  )
+
   // Request access (re-run by retry()).
   useEffect(() => {
     if (!SUPPORTED) return
@@ -171,13 +190,9 @@ export function useMidiInput({
       const [, a, b = 0] = data
 
       if (type === 0x90 && b > 0) {
-        down.current.add(a)
-        if (pedal.current) sustained.current.add(a)
-        onNoteOnRef.current?.({ note: a, velocity: b, channel })
-        flush()
+        press(a, b, channel)
       } else if (type === 0x80 || (type === 0x90 && b === 0)) {
-        down.current.delete(a)
-        flush()
+        release(a)
       } else if (type === 0xb0 && a === SUSTAIN_CC) {
         const on = b >= 64
         if (on === pedal.current) return
@@ -196,7 +211,7 @@ export function useMidiInput({
       input.removeEventListener('midimessage', onMessage)
       clearNotes()
     }
-  }, [access, selectedId, flush, clearNotes])
+  }, [access, selectedId, flush, clearNotes, press, release])
 
   const select = useCallback(
     (id: string) => {
@@ -223,6 +238,9 @@ export function useMidiInput({
     held,
     sustain,
     panic: clearNotes,
+    /** Play a note without a controller (the on-screen keyboard). Goes through the same sustain logic. */
+    press,
+    release,
     retry,
   }
 }

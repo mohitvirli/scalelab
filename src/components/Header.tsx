@@ -1,6 +1,7 @@
 import type { MidiInputInfo } from '../midi/useMidiInput'
 import { MidiMap } from './MidiMap'
 import type { OctaveNaming } from '../theory'
+import type { PianoStatus } from '../audio/usePiano'
 
 export type Theme = 'dark' | 'light'
 export type Accidentals = 'auto' | 'sharps' | 'flats'
@@ -26,6 +27,10 @@ interface HeaderProps {
   onCancelLearn: () => void
   onClearBinding: () => void
   onLive: () => void
+  piano: boolean
+  pianoStatus: PianoStatus
+  pianoProgress: number
+  onPianoToggle: () => void
 }
 
 function Segmented<T extends string>({ label, value, options, onChange, disabled, title }: {
@@ -102,6 +107,8 @@ export function Header(p: HeaderProps) {
           options={[{ value: 'auto', label: 'Auto' }, { value: 'sharps', label: '♯' }, { value: 'flats', label: '♭' }]}
         />
 
+        <PianoToggle {...p} />
+
         <button type="button" className="btn btn--ghost" onClick={p.onPanic} title="Forget every held note, for when one sticks because its note-off never arrived">
           All notes off
         </button>
@@ -145,5 +152,30 @@ function ResetControl(p: HeaderProps) {
         Reset
       </button>
     </MidiMap>
+  )
+}
+
+function PianoToggle(p: HeaderProps) {
+  const label =
+    !p.piano ? 'Piano' :
+    p.pianoStatus === 'loading' ? `Piano ${Math.round(p.pianoProgress * 100)}%` :
+    p.pianoStatus === 'suspended' ? 'Piano · tap' :
+    p.pianoStatus === 'error' ? 'Piano ⚠' : 'Piano'
+  const title =
+    !p.piano ? 'Hear a grand piano when you play, and play the on-screen keys with the mouse (P)' :
+    p.pianoStatus === 'loading' ? 'Loading piano samples (cached after the first time)' :
+    p.pianoStatus === 'suspended' ? 'The browser holds audio until you click or press a key in the page' :
+    p.pianoStatus === 'error' ? "Couldn't load the piano samples. Check the connection and toggle again" :
+    'Piano on: your controller and the on-screen keys play sound. Click to mute (P)'
+  return (
+    <button
+      type="button"
+      className={`btn btn--piano ${p.piano && p.pianoStatus !== 'ready' ? 'is-waiting' : ''}`}
+      aria-pressed={p.piano}
+      onClick={p.onPianoToggle}
+      title={title}
+    >
+      {label}
+    </button>
   )
 }

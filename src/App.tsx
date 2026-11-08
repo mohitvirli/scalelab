@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { usePiano } from './audio/usePiano'
 import { ChordDisplay } from './components/ChordDisplay'
 import { ChordSearch } from './components/ChordSearch'
 import { Header, type Accidentals, type Theme } from './components/Header'
@@ -74,8 +75,12 @@ export default function App() {
   // Everything the visualizations animate from, read every frame without re-rendering.
   const [bus] = useState(() => new NoteBus())
 
+  const [pianoOn, setPianoOn] = usePersistentState('scalelab.piano', false)
+  const piano = usePiano(pianoOn)
+
   const midi = useMidiInput({
     onNoteOn: ({ note, velocity }) => {
+      piano.noteOn(note, velocity)
       bus.noteOn(note, velocity)
       if (listeningRef.current) selection.addPlayed(pitchClass(note))
     },
@@ -90,6 +95,15 @@ export default function App() {
     bus.setHeld(midi.held)
     bus.setSustain(midi.sustain)
   }, [bus, midi.held, midi.sustain])
+  // Released keys (and the pedal coming up) stop their notes.
+  const { sync: syncPiano } = piano
+  useEffect(() => {
+    syncPiano(midi.held)
+  }, [syncPiano, midi.held])
+  const keyPlay = useMemo(
+    () => (pianoOn ? { press: midi.press, release: midi.release } : undefined),
+    [pianoOn, midi.press, midi.release],
+  )
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -118,6 +132,7 @@ export default function App() {
   }
   const clearNotes = () => {
     midi.panic()
+    piano.silence()
     setShown([])
   }
 
@@ -240,11 +255,12 @@ export default function App() {
     lastShown.current = shown
   }, [bus, shown, rootPc, activeScale])
 
-  // Shortcuts: L live mode, F fullscreen, R reset, Esc cancels mapping or leaves live mode;
+  // Shortcuts: L live mode, F fullscreen, R reset, P piano, Esc cancels mapping or leaves live mode;
   // in live mode 1–3 pick a visualization and V cycles them.
-  const shortcuts = useRef({ live, viz, setLive, setViz, resetAll, fullscreen, resetTrigger, vizTrigger })
+  const togglePiano = () => setPianoOn((on) => !on)
+  const shortcuts = useRef({ live, viz, setLive, setViz, resetAll, fullscreen, resetTrigger, vizTrigger, togglePiano })
   useEffect(() => {
-    shortcuts.current = { live, viz, setLive, setViz, resetAll, fullscreen, resetTrigger, vizTrigger }
+    shortcuts.current = { live, viz, setLive, setViz, resetAll, fullscreen, resetTrigger, vizTrigger, togglePiano }
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -274,6 +290,9 @@ export default function App() {
           break
         case 'r':
           a.resetAll()
+          break
+        case 'p':
+          a.togglePiano()
           break
       }
     }
@@ -324,6 +343,10 @@ export default function App() {
         onCancelLearn={resetTrigger.cancelLearn}
         onClearBinding={resetTrigger.clear}
         onLive={() => setLive(true)}
+        piano={pianoOn}
+        pianoStatus={piano.status}
+        pianoProgress={piano.progress}
+        onPianoToggle={togglePiano}
       />
       )}
 
@@ -375,6 +398,7 @@ export default function App() {
           naming={naming}
           spell={chordSpell}
           onKeyClick={live ? undefined : (n) => selection.toggle(pitchClass(n))}
+          play={keyPlay}
         />
         )}
       </section>
