@@ -46,7 +46,7 @@ struct View {
   sand: vec4f,
   moving: vec4f,
   // x = what one glow sprite adds, y = glow level of evenly spread sand (no glow below it),
-  // z = strongest the glow gets.
+  // z = strongest the glow gets, w = how quickly it gets there as sand piles up.
   glow: vec4f,
 }
 
@@ -240,7 +240,7 @@ fn fsScreen(in: ScreenOut) -> @location(0) vec4f {
   let t = textureSample(glowTex, glowSampler, in.uv);
   let d = t.r + t.g;
   // Only sand gathered thicker than an even spread glows, so loose sand stays plain.
-  let a = (1.0 - exp(-max(d - V.glow.y, 0.0) * 1.4)) * V.glow.z;
+  let a = (1.0 - exp(-max(d - V.glow.y, 0.0) * V.glow.w)) * V.glow.z;
   let color = mix(V.sand.rgb, V.moving.rgb, clamp(t.g / max(d, 0.0001) * 1.5, 0.0, 1.0));
   return vec4f(color * a, a);
 }

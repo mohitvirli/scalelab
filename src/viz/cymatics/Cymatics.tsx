@@ -14,7 +14,13 @@ const MAX_SHOCKS = 8
 const PARAMS_FLOATS = 8 + MAX_MODES * 4 + 4 + MAX_SHOCKS * 4
 const VIEW_FLOATS = 16
 /** Radius of a grain's glow in CSS pixels. */
-const GLOW_PX = 13
+const GLOW_PX = 16
+/** Glow level below which sand doesn't glow; evenly spread sand sits at 1, so loose sand stays plain. */
+const GLOW_FLOOR = 1.15
+/** Strongest the glow gets, as a share of the sand colour. */
+const GLOW_MAX = 0.42
+/** How quickly the glow reaches full strength as sand piles up. Low keeps the halo soft-edged. */
+const GLOW_RISE = 0.5
 /** One grain in this many casts a glow: the glow is soft, so a sample of the sand is enough. */
 const GLOW_EVERY = 4
 /** The glow is drawn at 1/this of the canvas resolution. */
@@ -237,10 +243,10 @@ export function Cymatics({ bus, children }: { bus: NoteBus; children?: ReactNode
         const glowGrains = Math.floor(GRAINS / GLOW_EVERY)
         const perSprite = (4.5 * w * h) / (glowGrains * Math.PI * GLOW_PX * GLOW_PX)
         viewData.set([
-          aspect, (GRAIN_PX * dpr) / canvas.width, (GRAIN_PX * dpr) / canvas.height, GLOW_PX / GRAIN_PX,
+          aspect, (GRAIN_PX * dpr) / canvas.width, (GRAIN_PX * dpr) / canvas.height, (2 * GLOW_PX) / GRAIN_PX,
           ...sand, 0.5,
           ...moving, 0.55,
-          perSprite, 1.15, 0.42, 0,
+          perSprite, GLOW_FLOOR, GLOW_MAX, GLOW_RISE,
         ])
         device.queue.writeBuffer(view, 0, viewData)
 
