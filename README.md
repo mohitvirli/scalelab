@@ -34,8 +34,10 @@ One-time setup:
 
 After that, every push builds automatically:
 
-- **Production**: the default branch, at the project's main `*.vercel.app` URL.
+- **Production**: the default branch, at [scalelab.clevir.li](https://scalelab.clevir.li) (and the project's main `*.vercel.app` URL).
 - **Previews**: every other branch gets a URL that always points at its latest push, like `scalelab-git-<branch>-<team>.vercel.app` (slashes in the branch name become dashes). Each pull request also gets a comment with its preview link.
+
+The custom domain is set up outside the repo: add `scalelab.clevir.li` under the Vercel project's Settings → Domains, then create the `CNAME` record for `scalelab` that Vercel shows at the DNS provider for `clevir.li`. Vercel issues the certificate once the record resolves.
 
 Previews are behind Vercel login by default (Settings → Deployment Protection). Turn that off if you want to open them on another device without signing in. Web MIDI works on the deployed site because Vercel serves HTTPS; Chrome asks for MIDI permission once per site.
 
