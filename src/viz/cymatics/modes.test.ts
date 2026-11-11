@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { approachAngle, noteModes, plateAngle, plateModes, registerZoom } from './modes'
+import { approachAngle, blendModes, modeDistance, noteModes, noteX, plateAngle, plateModes, registerZoom } from './modes'
 
 describe('plateModes', () => {
   it('a major triad uses small ratios', () => {
@@ -70,5 +70,44 @@ describe('registerZoom', () => {
     expect(registerZoom(48)).toBeCloseTo(Math.SQRT1_2)
     expect(registerZoom(0)).toBe(0.6)
     expect(registerZoom(127)).toBe(1.8)
+  })
+})
+
+describe('morphing between figures', () => {
+  const c = noteModes(0, [48, 52, 55])
+  const am = noteModes(9, [45, 48, 52])
+  const fSharp = noteModes(6, [42, 49])
+
+  it('the same figure is no distance away, an unrelated one is far', () => {
+    expect(modeDistance(c, c)).toBe(0)
+    expect(modeDistance(c, fSharp)).toBeGreaterThan(modeDistance(c, c.slice(0, 2)))
+    expect(modeDistance(c, [])).toBeCloseTo(1)
+  })
+
+  it('blends part of the way, keeping shared modes and fading the rest', () => {
+    const half = blendModes(c, am, 0.5)
+    const weight = (n: number, m: number) => half.find((x) => x.n === n && x.m === m)?.weight ?? 0
+    expect(weight(1, 1)).toBeCloseTo(1 / 3)
+    expect(weight(5, 4)).toBeCloseTo(1 / 6)
+    expect(weight(6, 5)).toBeCloseTo(1 / 6)
+  })
+
+  it('arrives at the target and drops what has faded out', () => {
+    let mix = c
+    for (let i = 0; i < 60; i++) mix = blendModes(mix, am, 0.2)
+    expect(mix.map((m) => [m.n, m.m]).sort()).toEqual(am.map((m) => [m.n, m.m]).sort())
+    expect(blendModes(mix, [], 1)).toEqual([])
+  })
+
+  it('keeps only the loudest modes when capped', () => {
+    expect(blendModes(c, fSharp, 0.9, 2)).toHaveLength(2)
+  })
+})
+
+describe('noteX', () => {
+  it('runs left to right across the piano', () => {
+    expect(noteX(21)).toBe(-1)
+    expect(noteX(108)).toBe(1)
+    expect(noteX(64.5)).toBeCloseTo(0)
   })
 })

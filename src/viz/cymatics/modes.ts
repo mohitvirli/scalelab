@@ -92,3 +92,44 @@ export function approachAngle(current: number, target: number, amount: number): 
   if (d < -PERIOD / 2) d += PERIOD
   return current + d * amount
 }
+
+const modeKey = (m: PlateMode) => `${Math.max(m.n, m.m)}:${Math.min(m.n, m.m)}`
+
+/**
+ * How different two figures are, 0 (same) to 1 (nothing in common): the summed weight
+ * difference per mode over the total weight. C to Am share most of their modes; C to F♯ share almost none.
+ */
+export function modeDistance(a: readonly PlateMode[], b: readonly PlateMode[]): number {
+  const diff = new Map<string, number>()
+  for (const m of a) diff.set(modeKey(m), (diff.get(modeKey(m)) ?? 0) + m.weight)
+  for (const m of b) diff.set(modeKey(m), (diff.get(modeKey(m)) ?? 0) - m.weight)
+  let sum = 0
+  for (const d of diff.values()) sum += Math.abs(d)
+  const total = [...a, ...b].reduce((t, m) => t + m.weight, 0)
+  return total === 0 ? 0 : Math.min(1, sum / total)
+}
+
+/**
+ * Move the sounding mix `current` a fraction `amount` of the way to `target`, so one figure melts
+ * into the next: shared modes stay, old ones fade out and new ones fade in. Modes that have faded
+ * to nothing are dropped, and the loudest `max` are kept.
+ */
+export function blendModes(
+  current: readonly PlateMode[], target: readonly PlateMode[], amount: number, max = Infinity,
+): PlateMode[] {
+  const goal = new Map(target.map((m) => [modeKey(m), m]))
+  const out: PlateMode[] = []
+  for (const m of current) {
+    const to = goal.get(modeKey(m))
+    goal.delete(modeKey(m))
+    const weight = m.weight + ((to?.weight ?? 0) - m.weight) * amount
+    if (to || weight > 0.002) out.push({ n: m.n, m: m.m, weight })
+  }
+  for (const m of goal.values()) out.push({ n: m.n, m: m.m, weight: m.weight * amount })
+  return out.length > max ? out.sort((a, b) => b.weight - a.weight).slice(0, max) : out
+}
+
+/** Where a note's ripple starts across the plate: low notes left, high notes right, −1 to 1. */
+export function noteX(note: number, low = 21, high = 108): number {
+  return Math.min(1, Math.max(-1, ((note - low) / (high - low)) * 2 - 1))
+}
